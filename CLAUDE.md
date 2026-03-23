@@ -44,9 +44,10 @@ Skills live in `.claude/skills/`. Each is a reusable workflow for a recurring ta
 
 Skills are built organically as patterns emerge. The backlog below is what's coming next.
 
+### Built Skills
+- **dm-response** — Draft replies to Instagram, TikTok, and Facebook DMs. Knows the full product catalog, store locations, pricing rules, and Mo's voice. See `.claude/skills/dm-response/SKILL.md`
+
 ### Skills Backlog
-These are Mo's biggest time sinks and highest-value workflows to turn into skills:
-- **dm-response** — Draft replies to Instagram, TikTok, and Facebook DMs that keep conversations going and convert to a sale or in-store visit (Priority #1 — this is the biggest daily time drain)
 - **caption-writer** — Write post captions in Mo's external voice
 - **content-ideas** — Generate reel/short video concepts for the jewelry brand
 - **customer-followup** — Draft follow-up messages for leads who showed interest but didn't convert
