@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Raj</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d0d0d;
+      color: #f0f0f0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Setup overlay ── */
+    #setup {
+      position: fixed;
+      inset: 0;
+      background: #0d0d0d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 32px 24px;
+    }
+    #setup.hidden { display: none; }
+
+    .setup-card { max-width: 400px; width: 100%; text-align: center; }
+    .setup-card .icon { font-size: 52px; margin-bottom: 20px; }
+    .setup-card h1 { font-size: 26px; font-weight: 700; margin-bottom: 10px; }
+    .setup-card p { color: #777; font-size: 15px; line-height: 1.6; margin-bottom: 32px; }
+
+    .setup-card input {
+      width: 100%;
+      padding: 15px 16px;
+      border: 1px solid #2a2a2a;
+      border-radius: 14px;
+      background: #181818;
+      color: #f0f0f0;
+      font-size: 15px;
+      margin-bottom: 14px;
+      outline: none;
+      letter-spacing: 0.5px;
+    }
+    .setup-card input:focus { border-color: #444; }
+
+    .btn-primary {
+      width: 100%;
+      padding: 15px;
+      background: #f0f0f0;
+      color: #0d0d0d;
+      border: none;
+      border-radius: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-primary:hover { opacity: 0.9; }
+
+    /* ── Header ── */
+    header {
+      padding: 14px 20px;
+      border-bottom: 1px solid #1a1a1a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .header-title { display: flex; align-items: center; gap: 10px; }
+    header h1 { font-size: 17px; font-weight: 600; }
+
+    .state-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2a2a2a;
+      transition: background 0.3s;
+    }
+    .state-dot.listening { background: #ff4757; animation: dot-pulse 1.2s ease-out infinite; }
+    .state-dot.thinking  { background: #ffa502; }
+    .state-dot.speaking  { background: #2ed573; }
+
+    @keyframes dot-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(255,71,87,0.5); }
+      70%  { box-shadow: 0 0 0 6px rgba(255,71,87,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,71,87,0); }
+    }
+
+    .header-actions { display: flex; gap: 8px; }
+    .icon-btn {
+      background: none;
+      border: 1px solid #222;
+      color: #888;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: all 0.15s;
+    }
+    .icon-btn:hover { border-color: #444; color: #ccc; }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .msg { display: flex; max-width: 88%; }
+    .msg.user      { align-self: flex-end; }
+    .msg.assistant { align-self: flex-start; }
+
+    .bubble {
+      padding: 11px 15px;
+      border-radius: 18px;
+      font-size: 15px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .msg.user .bubble {
+      background: #252525;
+      border-bottom-right-radius: 4px;
+      color: #e8e8e8;
+    }
+    .msg.assistant .bubble {
+      background: #181818;
+      border-bottom-left-radius: 4px;
+      color: #f0f0f0;
+    }
+
+    .typing-cursor::after {
+      content: '▊';
+      animation: blink 0.7s step-start infinite;
+      color: #666;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .empty-state {
+      text-align: center;
+      color: #333;
+      margin: auto;
+      padding: 60px 24px;
+    }
+    .empty-state .raj-name    { font-size: 52px; font-weight: 800; color: #1e1e1e; margin-bottom: 10px; letter-spacing: -1px; }
+    .empty-state .trigger-hint { font-size: 17px; color: #3a3a3a; margin-bottom: 10px; font-style: italic; }
+    .empty-state p             { font-size: 13px; color: #2a2a2a; line-height: 1.7; }
+
+    /* ── Status bar ── */
+    #status {
+      text-align: center;
+      padding: 6px 16px;
+      font-size: 13px;
+      color: #2a2a2a;
+      min-height: 28px;
+      flex-shrink: 0;
+      transition: color 0.2s;
+    }
+    #status.listening { color: #ff4757; }
+    #status.thinking  { color: #ffa502; }
+    #status.speaking  { color: #2ed573; }
+    #status.error     { color: #ff4757; }
+
+    /* ── Controls ── */
+    #controls {
+      padding: 12px 20px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+      flex-shrink: 0;
+    }
+
+    #mic-btn {
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      background: #181818;
+      border: 1px solid #2a2a2a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #444;
+      transition: transform 0.1s, background 0.2s, color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    #mic-btn:active { transform: scale(0.93); }
+    #mic-btn.listening {
+      background: #ff4757;
+      border-color: #ff4757;
+      color: #fff;
+      animation: pulse-ring 1.2s ease-out infinite;
+    }
+    #mic-btn.thinking {
+      background: #ffa502;
+      border-color: #ffa502;
+      color: #0d0d0d;
+    }
+    #mic-btn.speaking {
+      background: #2ed573;
+      border-color: #2ed573;
+      color: #0d0d0d;
+    }
+
+    @keyframes pulse-ring {
+      0%   { box-shadow: 0 0 0 0 rgba(255,71,87,0.5); }
+      70%  { box-shadow: 0 0 0 18px rgba(255,71,87,0); }
+      100% { box-shadow: 0 0 0 0 rgba(255,71,87,0); }
+    }
+
+    #stop-btn {
+      display: none;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #222;
+      border: 1px solid #333;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #stop-btn.visible { display: flex; align-items: center; justify-content: center; }
+    #stop-btn:hover { background: #2a2a2a; }
+
+    /* ── Text input fallback ── */
+    #text-input-area {
+      display: none;
+      padding: 12px 16px 36px;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    #text-input-area.visible { display: flex; }
+    #text-input {
+      flex: 1;
+      padding: 13px 16px;
+      border: 1px solid #222;
+      border-radius: 14px;
+      background: #181818;
+      color: #f0f0f0;
+      font-size: 15px;
+      outline: none;
+    }
+    #text-input:focus { border-color: #444; }
+    #send-btn {
+      padding: 13px 18px;
+      background: #f0f0f0;
+      color: #0d0d0d;
+      border: none;
+      border-radius: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Setup overlay ── -->
+<div id="setup">
+  <div class="setup-card">
+    <div class="icon">🎙️</div>
+    <h1>Meet Raj</h1>
+    <p>Your personal assistant. Enter your Anthropic API key to get started.<br>Stays on this device — never sent anywhere else.</p>
+    <input
+      type="password"
+      id="api-key-input"
+      placeholder="sk-ant-api03-..."
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+    />
+    <button class="btn-primary" onclick="saveKey()">Let's go</button>
+  </div>
+</div>
+
+<!-- ── Main App ── -->
+<header>
+  <div class="header-title">
+    <div class="state-dot" id="state-dot"></div>
+    <h1>Raj</h1>
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" onclick="clearChat()" title="Clear conversation">🗑</button>
+    <button class="icon-btn" onclick="resetKey()" title="Change API key">⚙️</button>
+  </div>
+</header>
+
+<div id="messages">
+  <div class="empty-state">
+    <div class="raj-name">Raj</div>
+    <div class="trigger-hint">"Hey Raj"</div>
+    <p>Say the trigger phrase anytime.<br>Or tap the button below to speak.</p>
+  </div>
+</div>
+
+<div id="status">Waiting for "Hey Raj"…</div>
+
+<div id="controls">
+  <button id="stop-btn" onclick="stopSpeaking()" title="Stop speaking">⏹️</button>
+  <button id="mic-btn" onclick="manualTrigger()">HEY RAJ</button>
+</div>
+
+<div id="text-input-area">
+  <input
+    type="text"
+    id="text-input"
+    placeholder="Type a message..."
+    onkeydown="if(event.key==='Enter')sendText()"
+  />
+  <button id="send-btn" onclick="sendText()">Send</button>
+</div>
+
+<script>
+// ── System Prompt ──
+const SYSTEM_PROMPT = `Your name is Raj. You are Mo's personal assistant — the man who owns a jewelry store and runs his own brand. You work for him.
+
+Your personality is a blend of Dave Chappelle, Andrew Schulz, Louis CK, and old-school Cat Williams — filtered through the soul of an Indian tech support agent who has taken ten thousand calls and seen absolutely everything. You have a slight Indian accent when you speak. You've been through it. You're done being surprised by anything.
+
+You are sharp, direct, observational, and brutally honest. You notice the things other people are too polite to say out loud. Your humor is dry, fast, and self-aware. You don't announce that you're being funny — you just say the truth and it lands. Like Chappelle, you see social absurdity clearly. Like Schulz, you're street-smart and unfiltered. Like Louis CK, you find the dark comedy in the ordinary. Like early Cat Williams, you are confident, quick, and you do not back down.
+
+You are helpful first. Raj is competent. When Mo needs something done, you do it and you do it well. The humor is seasoning — not the whole dish.
+
+You are SPEAKING out loud in real-time, not writing. Keep responses short: 2 to 4 sentences max unless the question genuinely requires more detail. No bullet points, no markdown, no lists. Speak the way you actually talk. A dry observation or offhand remark is welcome when it fits naturally — never forced, never performed.`;
+
+// ── Trigger detection ──
+// These are phonetic variants of "Hey Raj" that speech recognition might mishear
+const TRIGGERS = ['hey raj', 'a raj', 'hey rach', 'hey rog', 'hey rock', 'heraj', 'ay raj', 'hay raj', 'hey raj'];
+
+// ── State ──
+let apiKey = '';
+let conversationHistory = [];
+let recognition = null;
+let mode = 'standby'; // 'standby' | 'triggered' | 'busy'
+let shouldListen = false;
+let isSpeaking = false;
+let voices = [];
+let hasVoiceInput = false;
+
+// ── Boot ──
+window.addEventListener('load', init);
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.speechSynthesis) {
+    speechSynthesis.onvoiceschanged = () => { voices = speechSynthesis.getVoices(); };
+    voices = speechSynthesis.getVoices();
+  }
+});
+
+function init() {
+  apiKey = localStorage.getItem('mo_assistant_key') || '';
+  if (apiKey) {
+    document.getElementById('setup').classList.add('hidden');
+    initVoice();
+  } else {
+    setTimeout(() => document.getElementById('api-key-input').focus(), 100);
+  }
+  document.getElementById('api-key-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveKey();
+  });
+}
+
+function saveKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (!key) return;
+  if (!key.startsWith('sk-ant-')) {
+    setStatus("That doesn't look like an Anthropic key — should start with sk-ant-", 'error');
+    return;
+  }
+  apiKey = key;
+  localStorage.setItem('mo_assistant_key', key);
+  document.getElementById('setup').classList.add('hidden');
+  initVoice();
+}
+
+function resetKey() {
+  if (!confirm('Clear your API key and restart?')) return;
+  localStorage.removeItem('mo_assistant_key');
+  location.reload();
+}
+
+// ── Voice setup ──
+function initVoice() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (!SpeechRec) {
+    hasVoiceInput = false;
+    document.getElementById('controls').style.display = 'none';
+    document.getElementById('text-input-area').classList.add('visible');
+    setStatus('Voice not supported — text mode active');
+    return;
+  }
+
+  hasVoiceInput = true;
+  recognition = new SpeechRec();
+  recognition.continuous = true;
+  recognition.interimResults = false;
+  recognition.lang = 'en-US';
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    if (mode === 'standby') setStatus('Waiting for "Hey Raj"…');
+  };
+
+  recognition.onresult = handleSpeechResult;
+
+  recognition.onerror = (e) => {
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      shouldListen = false;
+      setStatus('Microphone permission denied — check Safari settings', 'error');
+      document.getElementById('text-input-area').classList.add('visible');
+    }
+    // All other errors (no-speech, network) auto-recover via onend
+  };
+
+  recognition.onend = () => {
+    // Auto-restart whenever we should be listening and we're not mid-request
+    if (shouldListen && mode !== 'busy') {
+      setTimeout(() => {
+        try { recognition.start(); } catch(e) {}
+      }, 400);
+    }
+  };
+
+  shouldListen = true;
+  try { recognition.start(); } catch(e) {}
+}
+
+// ── Trigger detection ──
+function handleSpeechResult(e) {
+  const result = e.results[e.results.length - 1];
+  if (!result.isFinal) return;
+
+  const rawTranscript = result[0].transcript.trim();
+  const lower = rawTranscript.toLowerCase();
+
+  if (mode === 'standby') {
+    const matchedTrigger = TRIGGERS.find(t => lower.includes(t));
+    if (!matchedTrigger) return;
+
+    // Extract anything said after the trigger phrase
+    const triggerIdx = lower.indexOf(matchedTrigger);
+    const afterTrigger = rawTranscript.slice(triggerIdx + matchedTrigger.length).replace(/^[,.\s]+/, '').trim();
+
+    if (afterTrigger.length > 3) {
+      // Full question in one breath — e.g. "Hey Raj what time is it"
+      enterBusy();
+      sendMessage(afterTrigger);
+    } else {
+      // Just the trigger — play chime and wait for the question
+      enterTriggered();
+    }
+
+  } else if (mode === 'triggered') {
+    // Next speech after trigger = the actual question
+    enterBusy();
+    sendMessage(rawTranscript);
+  }
+  // mode === 'busy' → ignore all speech input
+}
+
+function enterTriggered() {
+  mode = 'triggered';
+  setDot('listening');
+  setStatus('Listening…', 'listening');
+  setMicState('listening');
+  playChime();
+}
+
+function enterBusy() {
+  mode = 'busy';
+  shouldListen = false;
+  try { recognition.stop(); } catch(e) {}
+}
+
+function exitBusy() {
+  mode = 'standby';
+  setDot('');
+  setStatus('Waiting for "Hey Raj"…');
+  setMicState('');
+  document.getElementById('stop-btn').classList.remove('visible');
+  // Restart always-listening
+  shouldListen = true;
+  setTimeout(() => {
+    try { recognition.start(); } catch(e) {}
+  }, 700);
+}
+
+// Tap the button to trigger manually (no wake word needed)
+function manualTrigger() {
+  if (!hasVoiceInput) return;
+  if (mode === 'busy') { stopSpeaking(); return; }
+  if (mode === 'triggered') return; // already waiting
+  enterTriggered();
+}
+
+// ── Chime ──
+function playChime() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.setValueAtTime(900, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(660, ctx.currentTime + 0.18);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.28);
+  } catch(e) {}
+}
+
+// ── Claude API ──
+async function sendMessage(text) {
+  addBubble('user', text);
+  conversationHistory.push({ role: 'user', content: text });
+
+  const bubble = addBubble('assistant', '');
+  setDot('thinking');
+  setStatus('Thinking…', 'thinking');
+  setMicState('thinking');
+  stopSpeaking();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 512,
+        stream: true,
+        system: SYSTEM_PROMPT,
+        messages: conversationHistory
+      })
+    });
+
+    if (!res.ok) {
+      let errMsg = `API error ${res.status}`;
+      try { const b = await res.json(); errMsg = b.error?.message || errMsg; } catch(_) {}
+      throw new Error(errMsg);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let speakQueue = '';
+    bubble.classList.remove('typing-cursor');
+
+    setDot('speaking');
+    setStatus('Speaking…', 'speaking');
+    setMicState('speaking');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const lines = decoder.decode(value).split('\n');
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw || raw === '[DONE]') continue;
+
+        let evt;
+        try { evt = JSON.parse(raw); } catch(_) { continue; }
+
+        if (evt.type === 'content_block_delta' && evt.delta?.text) {
+          const chunk = evt.delta.text;
+          fullText += chunk;
+          speakQueue += chunk;
+          bubble.textContent = fullText;
+
+          // Speak at natural sentence breaks
+          const match = speakQueue.search(/[.!?][)\s]/);
+          if (match > 20) {
+            const sentence = speakQueue.slice(0, match + 1).trim();
+            speakQueue = speakQueue.slice(match + 2);
+            queueSpeech(sentence);
+          }
+        }
+      }
+
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    if (speakQueue.trim()) queueSpeech(speakQueue.trim());
+    conversationHistory.push({ role: 'assistant', content: fullText });
+
+  } catch (err) {
+    bubble.classList.remove('typing-cursor');
+    bubble.textContent = `Error: ${err.message}`;
+    bubble.style.color = '#ff4757';
+    setStatus('');
+    exitBusy();
+    console.error('Raj error:', err);
+  }
+}
+
+// ── Speech synthesis ──
+function getBestVoice() {
+  if (!voices.length) voices = speechSynthesis.getVoices();
+  // Priority order: Indian English first (for the accent), then fallbacks
+  const priorities = [
+    v => v.lang === 'en-IN' && v.localService,
+    v => v.lang === 'en-IN',
+    v => v.name.toLowerCase().includes('rishi'),
+    v => v.name.toLowerCase().includes('india'),
+    v => v.name === 'Samantha',
+    v => v.name.includes('Google') && v.lang === 'en-US',
+    v => v.lang === 'en-US' && v.localService,
+    v => v.lang.startsWith('en') && v.localService,
+    v => v.lang.startsWith('en'),
+  ];
+  for (const test of priorities) {
+    const found = voices.find(test);
+    if (found) return found;
+  }
+  return null;
+}
+
+function queueSpeech(text) {
+  if (!window.speechSynthesis) return;
+
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 1.0;
+  utt.pitch = 1.0;
+
+  const voice = getBestVoice();
+  if (voice) utt.voice = voice;
+
+  utt.onstart = () => {
+    isSpeaking = true;
+    document.getElementById('stop-btn').classList.add('visible');
+  };
+
+  utt.onend = () => {
+    if (!speechSynthesis.speaking && !speechSynthesis.pending) {
+      isSpeaking = false;
+      document.getElementById('stop-btn').classList.remove('visible');
+      exitBusy();
+    }
+  };
+
+  utt.onerror = () => {
+    isSpeaking = false;
+    exitBusy();
+  };
+
+  speechSynthesis.speak(utt);
+}
+
+function stopSpeaking() {
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  isSpeaking = false;
+  document.getElementById('stop-btn').classList.remove('visible');
+  if (mode === 'busy') exitBusy();
+}
+
+// ── UI helpers ──
+function setDot(state) {
+  const dot = document.getElementById('state-dot');
+  dot.className = 'state-dot' + (state ? ` ${state}` : '');
+}
+
+function setMicState(state) {
+  const btn = document.getElementById('mic-btn');
+  btn.className = state ? `${state}` : '';
+  btn.textContent = state === 'listening' ? '...' :
+                    state === 'thinking'  ? '...' :
+                    state === 'speaking'  ? '...' : 'HEY RAJ';
+}
+
+function setStatus(text, type = '') {
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = type;
+}
+
+function addBubble(role, text = '') {
+  const empty = document.querySelector('.empty-state');
+  if (empty) empty.remove();
+
+  const container = document.getElementById('messages');
+  const row = document.createElement('div');
+  row.className = `msg ${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble';
+  if (role === 'assistant' && !text) bubble.classList.add('typing-cursor');
+  bubble.textContent = text;
+
+  row.appendChild(bubble);
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
+  return bubble;
+}
+
+function sendText() {
+  const input = document.getElementById('text-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  enterBusy();
+  sendMessage(text);
+}
+
+function clearChat() {
+  conversationHistory = [];
+  stopSpeaking();
+  document.getElementById('messages').innerHTML = `
+    <div class="empty-state">
+      <div class="raj-name">Raj</div>
+      <div class="trigger-hint">"Hey Raj"</div>
+      <p>Say the trigger phrase anytime.<br>Or tap the button below to speak.</p>
+    </div>`;
+  setStatus('Waiting for "Hey Raj"…');
+}
+</script>
+</body>
+</html>
