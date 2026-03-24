@@ -148,16 +148,39 @@ def handle_webhook():
 
 @app.route("/subscribe", methods=["GET"])
 def subscribe_page():
-    """Subscribe the Facebook Page to receive message webhooks."""
-    resp = requests.post(
+    """Subscribe Facebook Page and Instagram account to receive message webhooks."""
+    results = {}
+
+    # Subscribe Facebook Page
+    fb_resp = requests.post(
         "https://graph.facebook.com/v21.0/me/subscribed_apps",
-        params={
-            "subscribed_fields": "messages",
-            "access_token": FB_PAGE_ACCESS_TOKEN
-        },
+        params={"subscribed_fields": "messages", "access_token": FB_PAGE_ACCESS_TOKEN},
         timeout=10
     )
-    return jsonify(resp.json()), resp.status_code
+    results["facebook"] = fb_resp.json()
+
+    # Get Instagram Business Account ID connected to this page
+    ig_id_resp = requests.get(
+        "https://graph.facebook.com/v21.0/me",
+        params={"fields": "instagram_business_account", "access_token": IG_PAGE_ACCESS_TOKEN},
+        timeout=10
+    )
+    ig_data = ig_id_resp.json()
+    ig_user_id = ig_data.get("instagram_business_account", {}).get("id")
+
+    if ig_user_id:
+        # Subscribe Instagram account
+        ig_resp = requests.post(
+            f"https://graph.facebook.com/v21.0/{ig_user_id}/subscribed_apps",
+            params={"subscribed_fields": "messages", "access_token": IG_PAGE_ACCESS_TOKEN},
+            timeout=10
+        )
+        results["instagram"] = ig_resp.json()
+        results["instagram_user_id"] = ig_user_id
+    else:
+        results["instagram"] = "Could not find Instagram Business Account linked to this page"
+
+    return jsonify(results), 200
 
 
 if __name__ == "__main__":
