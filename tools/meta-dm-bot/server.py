@@ -146,6 +146,20 @@ def handle_webhook():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route("/subscribe", methods=["GET"])
+def subscribe_page():
+    """Subscribe the Facebook Page to receive message webhooks."""
+    resp = requests.post(
+        "https://graph.facebook.com/v21.0/me/subscribed_apps",
+        params={
+            "subscribed_fields": "messages",
+            "access_token": FB_PAGE_ACCESS_TOKEN
+        },
+        timeout=10
+    )
+    return jsonify(resp.json()), resp.status_code
+
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
