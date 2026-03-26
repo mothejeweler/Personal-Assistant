@@ -7,3 +7,5 @@ node_modules/
 **/.DS_Store
 data/video_personality_state.json
 data/personality_delta.md
+data/runtime_editor.json
+data/runtime_editor_test.json

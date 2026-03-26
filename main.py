@@ -10,6 +10,7 @@ import os
 import json
 import logging
 import asyncio
+from typing import Set
 from fastapi import FastAPI, Request, HTTPException, Response
 from anthropic import Anthropic
 import requests
@@ -51,11 +52,21 @@ try:
 except ImportError:
     VoiceSynthesizer = None
 
+try:
+    from runtime_editor import RuntimeEditor
+except ImportError:
+    RuntimeEditor = None
+
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
 YOUTUBE_CHANNEL_RSS_URL = os.getenv("YOUTUBE_CHANNEL_RSS_URL", "")
 PERSONALITY_REFRESH_MINUTES = int(os.getenv("PERSONALITY_REFRESH_MINUTES", "60"))
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
 VOICE_PROVIDER = os.getenv("VOICE_PROVIDER", "none")
+OWNER_FACEBOOK_IDS_RAW = os.getenv("OWNER_FACEBOOK_IDS", "")
+
+OWNER_FACEBOOK_IDS: Set[str] = {
+    x.strip() for x in OWNER_FACEBOOK_IDS_RAW.split(",") if x.strip()
+}
 
 video_updater = None
 if PersonalityVideoUpdater is not None:
@@ -67,19 +78,31 @@ if PersonalityVideoUpdater is not None:
 sync_task = None
 
 voice_synth = VoiceSynthesizer(provider=VOICE_PROVIDER) if VoiceSynthesizer else None
+runtime_editor = RuntimeEditor(default_refresh_minutes=PERSONALITY_REFRESH_MINUTES) if RuntimeEditor else None
+
+
+def is_owner_sender(sender_id: str) -> bool:
+    if not sender_id:
+        return False
+    return sender_id in OWNER_FACEBOOK_IDS
 
 
 def build_runtime_system_prompt() -> str:
     """Build the current system prompt including fresh personality deltas from new videos."""
+    prompt = RAJ_SYSTEM_PROMPT
+
+    if runtime_editor:
+        prompt = f"{prompt}\n\n---\n{runtime_editor.get_prompt_appendix()}"
+
     if not video_updater:
-        return RAJ_SYSTEM_PROMPT
+        return prompt
 
     delta = video_updater.get_runtime_delta_text(max_chars=6000)
     if not delta:
-        return RAJ_SYSTEM_PROMPT
+        return prompt
 
     return (
-        f"{RAJ_SYSTEM_PROMPT}\n\n"
+        f"{prompt}\n\n"
         "---\n"
         "LATEST VOICE DELTAS FROM NEW VIDEOS\n"
         "Apply these as incremental adjustments to the base voice.\n\n"
@@ -108,7 +131,11 @@ async def personality_sync_loop() -> None:
         except Exception as e:
             logger.error("Video personality sync failed: %s", e, exc_info=True)
 
-        await asyncio.sleep(max(PERSONALITY_REFRESH_MINUTES, 5) * 60)
+        refresh_minutes = PERSONALITY_REFRESH_MINUTES
+        if runtime_editor:
+            refresh_minutes = int(runtime_editor.get_setting("personality_refresh_minutes", PERSONALITY_REFRESH_MINUTES))
+
+        await asyncio.sleep(max(refresh_minutes, 5) * 60)
 
 
 # ============================================================================
@@ -168,6 +195,15 @@ async def handle_facebook_webhook(request: Request):
                     
                     if message_text:
                         logger.info(f"Message from {sender_id}: {message_text}")
+
+                        # Owner-only real-time runtime editing with explicit confirmation.
+                        if runtime_editor and is_owner_sender(sender_id):
+                            if runtime_editor.get_setting("realtime_edit_permissions", True):
+                                handled, owner_reply = runtime_editor.handle_owner_message(sender_id, message_text)
+                                if handled:
+                                    await send_facebook_message(sender_id, owner_reply)
+                                    logger.info("Processed owner runtime edit flow for %s", sender_id)
+                                    continue
                         
                         # Generate response using Claude
                         response_text = await generate_response(message_text)
@@ -305,6 +341,20 @@ async def admin_voice_status(request: Request):
     return {"status": "ok", "voice": voice_synth.status()}
 
 
+@app.get("/admin/runtime/status")
+async def admin_runtime_status(request: Request):
+    """Show runtime-edit settings, learned habits, and pending confirmations."""
+    _check_admin_key(request)
+    if not runtime_editor:
+        return {"status": "disabled", "reason": "runtime_editor_unavailable"}
+
+    return {
+        "status": "ok",
+        "owner_ids_configured": len(OWNER_FACEBOOK_IDS),
+        "runtime": runtime_editor.get_status(),
+    }
+
+
 # ============================================================================
 # TEST ENDPOINT (for manual testing)
 # ============================================================================
@@ -397,6 +447,7 @@ async def startup_event():
     logger.info(f"API Key configured: {bool(ANTHROPIC_API_KEY)}")
     logger.info(f"Facebook tokens configured: {bool(FACEBOOK_PAGE_ACCESS_TOKEN and FACEBOOK_WEBHOOK_VERIFY_TOKEN)}")
     logger.info(f"System prompt loaded: {len(RAJ_SYSTEM_PROMPT)} characters")
+    logger.info("Owner IDs configured: %s", len(OWNER_FACEBOOK_IDS))
     if voice_synth:
         logger.info("Voice provider status: %s", voice_synth.status())
 
