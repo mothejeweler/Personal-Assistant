@@ -1,12 +1,17 @@
 """Voice synthesis helper for Raj.
 
 Supports provider-based text-to-speech with a simple interface.
-Current provider: ElevenLabs.
+Providers:
+- edge_tts: free, natural-sounding, no monthly subscription
+- elevenlabs: premium / voice-clone capable
 """
 
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+import tempfile
 from typing import Dict, Tuple
 
 import requests
@@ -18,11 +23,22 @@ class VoiceSynthesizer:
     def __init__(self, provider: str = "none") -> None:
         self.provider = (provider or "none").strip().lower()
 
+        self.edge_tts_voice = os.getenv("EDGE_TTS_VOICE", "en-US-BrianMultilingualNeural").strip()
+
         self.elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
         self.elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "").strip()
         self.elevenlabs_model_id = os.getenv("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2").strip()
 
     def status(self) -> Dict[str, object]:
+        if self.provider == "edge_tts":
+            return {
+                "provider": self.provider,
+                "configured": True,
+                "missing": [],
+                "voice": self.edge_tts_voice,
+                "notes": "Free neural voice. Good for simple human-sounding Raj voice without subscription.",
+            }
+
         if self.provider == "elevenlabs":
             return {
                 "provider": self.provider,
@@ -41,22 +57,39 @@ class VoiceSynthesizer:
         return {
             "provider": self.provider,
             "configured": False,
-            "missing": ["VOICE_PROVIDER=elevenlabs"],
+            "missing": ["Set VOICE_PROVIDER=edge_tts or VOICE_PROVIDER=elevenlabs"],
         }
 
-    def synthesize(self, text: str) -> Tuple[bytes, str]:
-        """Convert text into speech audio bytes.
+    def _synthesize_edge_tts(self, text: str) -> Tuple[bytes, str]:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_file:
+            tmp_path = tmp_file.name
 
-        Returns:
-            (audio_bytes, content_type)
-        """
-        text = (text or "").strip()
-        if not text:
-            raise ValueError("Text is required for voice synthesis")
+        try:
+            command = [
+                sys.executable,
+                "-m",
+                "edge_tts",
+                "--voice",
+                self.edge_tts_voice,
+                "--text",
+                text,
+                "--write-media",
+                tmp_path,
+            ]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+            if result.returncode != 0:
+                stderr = (result.stderr or result.stdout or "").strip()
+                raise RuntimeError(f"edge_tts failed: {stderr}")
 
-        if self.provider != "elevenlabs":
-            raise RuntimeError("Voice provider is not enabled. Set VOICE_PROVIDER=elevenlabs")
+            with open(tmp_path, "rb") as f:
+                return f.read(), "audio/mpeg"
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
 
+    def _synthesize_elevenlabs(self, text: str) -> Tuple[bytes, str]:
         if not self.elevenlabs_api_key or not self.elevenlabs_voice_id:
             raise RuntimeError("Missing ELEVENLABS_API_KEY or ELEVENLABS_VOICE_ID")
 
@@ -80,3 +113,21 @@ class VoiceSynthesizer:
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         return response.content, "audio/mpeg"
+
+    def synthesize(self, text: str) -> Tuple[bytes, str]:
+        """Convert text into speech audio bytes.
+
+        Returns:
+            (audio_bytes, content_type)
+        """
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("Text is required for voice synthesis")
+
+        if self.provider == "edge_tts":
+            return self._synthesize_edge_tts(text)
+
+        if self.provider == "elevenlabs":
+            return self._synthesize_elevenlabs(text)
+
+        raise RuntimeError("Voice provider is not enabled. Set VOICE_PROVIDER=edge_tts or VOICE_PROVIDER=elevenlabs")
