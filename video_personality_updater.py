@@ -40,7 +40,8 @@ class PersonalityVideoUpdater:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.insights_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.client = Anthropic()
+        self.api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+        self.client = Anthropic(api_key=self.api_key) if self.api_key else None
 
     @staticmethod
     def _default_rss_url(channel_id: str) -> str:
@@ -122,6 +123,9 @@ class PersonalityVideoUpdater:
             f"URL: {video.get('video_url', '')}\n"
         )
 
+        if self.client is None:
+            raise RuntimeError("Missing ANTHROPIC_API_KEY for personality video analysis")
+
         result = self.client.messages.create(
             model="claude-3-5-haiku-20241022",
             max_tokens=500,
@@ -160,6 +164,13 @@ class PersonalityVideoUpdater:
         if not self.enabled():
             logger.info("Video personality updater disabled: no RSS/channel configured.")
             return {"status": "disabled", "processed": 0}
+
+        if self.client is None:
+            return {
+                "status": "blocked",
+                "reason": "missing_anthropic_api_key",
+                "processed": 0,
+            }
 
         state = self.load_state()
         processed_ids = set(state.get("processed_video_ids", []))
