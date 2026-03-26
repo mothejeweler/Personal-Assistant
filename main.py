@@ -10,6 +10,7 @@ import os
 import json
 import logging
 import asyncio
+import tempfile
 from typing import Set
 from fastapi import FastAPI, Request, HTTPException, Response
 from anthropic import Anthropic
@@ -69,6 +70,10 @@ OWNER_FACEBOOK_IDS: Set[str] = {
     x.strip() for x in OWNER_FACEBOOK_IDS_RAW.split(",") if x.strip()
 }
 ANTHROPIC_MODEL = get_anthropic_model()
+SYNC_LOCK_PATH = os.getenv(
+    "RAJ_SYNC_LOCK_PATH",
+    os.path.join(tempfile.gettempdir(), "raj_personality_sync.lock"),
+)
 
 video_updater = None
 if PersonalityVideoUpdater is not None:
@@ -78,6 +83,7 @@ if PersonalityVideoUpdater is not None:
     )
 
 sync_task = None
+sync_lock_fd = None
 
 voice_synth = VoiceSynthesizer(provider=VOICE_PROVIDER) if VoiceSynthesizer else None
 runtime_editor = RuntimeEditor(default_refresh_minutes=PERSONALITY_REFRESH_MINUTES) if RuntimeEditor else None
@@ -120,6 +126,77 @@ def _check_admin_key(request: Request) -> None:
         raise HTTPException(status_code=403, detail="Invalid admin key")
 
 
+def _pid_is_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _acquire_sync_lock() -> bool:
+    global sync_lock_fd
+
+    if sync_lock_fd is not None:
+        return True
+
+    while True:
+        try:
+            sync_lock_fd = os.open(SYNC_LOCK_PATH, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            os.write(sync_lock_fd, str(os.getpid()).encode("utf-8"))
+            return True
+        except FileExistsError:
+            try:
+                with open(SYNC_LOCK_PATH, "r", encoding="utf-8") as handle:
+                    existing_pid = int((handle.read() or "0").strip() or "0")
+            except Exception:
+                existing_pid = 0
+
+            if existing_pid and _pid_is_alive(existing_pid):
+                return False
+
+            try:
+                os.remove(SYNC_LOCK_PATH)
+            except FileNotFoundError:
+                pass
+
+
+def _release_sync_lock() -> None:
+    global sync_lock_fd
+
+    if sync_lock_fd is None:
+        return
+
+    try:
+        os.close(sync_lock_fd)
+    finally:
+        sync_lock_fd = None
+
+    try:
+        os.remove(SYNC_LOCK_PATH)
+    except FileNotFoundError:
+        pass
+
+
+async def _run_personality_sync_once(max_new_videos: int) -> dict:
+    return await asyncio.to_thread(video_updater.sync_once, max_new_videos=max_new_videos)
+
+
+async def _personality_sync_manager() -> None:
+    try:
+        logger.info("Running startup personality sync from channel videos...")
+        startup_result = await _run_personality_sync_once(max_new_videos=5)
+        logger.info("Startup sync result: %s", startup_result)
+
+        await personality_sync_loop()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        logger.error("Personality sync manager failed: %s", e, exc_info=True)
+
+
 async def personality_sync_loop() -> None:
     """Background loop: keeps Raj updated when new channel videos are posted."""
     if not video_updater or not video_updater.enabled():
@@ -128,7 +205,7 @@ async def personality_sync_loop() -> None:
 
     while True:
         try:
-            result = video_updater.sync_once(max_new_videos=3)
+            result = await _run_personality_sync_once(max_new_videos=3)
             logger.info("Video personality sync result: %s", result)
         except Exception as e:
             logger.error("Video personality sync failed: %s", e, exc_info=True)
@@ -454,16 +531,11 @@ async def startup_event():
         logger.info("Voice provider status: %s", voice_synth.status())
 
     if video_updater and video_updater.enabled():
-        # One immediate sync at startup, then background polling.
-        try:
-            logger.info("Running startup personality sync from channel videos...")
-            startup_result = video_updater.sync_once(max_new_videos=5)
-            logger.info("Startup sync result: %s", startup_result)
-        except Exception as e:
-            logger.error("Startup personality sync failed: %s", e, exc_info=True)
-
-        sync_task = asyncio.create_task(personality_sync_loop())
-        logger.info("Background personality sync loop started (%s min).", PERSONALITY_REFRESH_MINUTES)
+        if _acquire_sync_lock():
+            sync_task = asyncio.create_task(_personality_sync_manager())
+            logger.info("Background personality sync leader started (%s min).", PERSONALITY_REFRESH_MINUTES)
+        else:
+            logger.info("Skipping personality sync startup in this worker; another worker owns the sync loop.")
 
 
 @app.on_event("shutdown")
@@ -472,6 +544,7 @@ async def shutdown_event():
     global sync_task
     if sync_task:
         sync_task.cancel()
+    _release_sync_lock()
     logger.info("🔥 Raj Assistant shutting down...")
 
 
