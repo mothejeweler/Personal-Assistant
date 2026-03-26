@@ -1,0 +1,155 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: raj_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-mo}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: ${DB_NAME:-raj_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache & Shared State
+  redis:
+    image: redis:7-alpine
+    container_name: raj_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+  # Raj Backend Server Instance 1
+  raj_server_1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: raj_backend_1
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mo}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-raj_db}
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8001
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE: ${TWILIO_PHONE}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN}
+      INSTAGRAM_BUSINESS_ACCOUNT_ID: ${INSTAGRAM_BUSINESS_ACCOUNT_ID}
+      MO_WHATSAPP_PHONE: ${MO_WHATSAPP_PHONE}
+      MO_PHONE: ${MO_PHONE}
+      INSTANCE_ID: server-1
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # Raj Backend Server Instance 2 (Redundancy)
+  raj_server_2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: raj_backend_2
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mo}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-raj_db}
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_HOST: 0.0.0.0
+      BACKEND_PORT: 8002
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE: ${TWILIO_PHONE}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN}
+      INSTAGRAM_BUSINESS_ACCOUNT_ID: ${INSTAGRAM_BUSINESS_ACCOUNT_ID}
+      MO_WHATSAPP_PHONE: ${MO_WHATSAPP_PHONE}
+      MO_PHONE: ${MO_PHONE}
+      INSTANCE_ID: server-2
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    restart: unless-stopped
+
+  # Shared Background Job Scheduler (runs on Server 1, uses Redis lock)
+  raj_scheduler:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: raj_scheduler
+    environment:
+      DATABASE_URL: postgresql://${DB_USER:-mo}:${DB_PASSWORD:-password}@postgres:5432/${DB_NAME:-raj_db}
+      REDIS_URL: redis://redis:6379/0
+      SCHEDULER_INSTANCE: "true"
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE: ${TWILIO_PHONE}
+      INSTAGRAM_ACCESS_TOKEN: ${INSTAGRAM_ACCESS_TOKEN}
+      INSTAGRAM_BUSINESS_ACCOUNT_ID: ${INSTAGRAM_BUSINESS_ACCOUNT_ID}
+      MO_WHATSAPP_PHONE: ${MO_WHATSAPP_PHONE}
+      MO_PHONE: ${MO_PHONE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: python jobs.py
+    restart: unless-stopped
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: raj_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - raj_server_1
+      - raj_server_2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: raj_network

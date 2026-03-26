@@ -138,6 +138,28 @@
       color: #f0f0f0;
     }
 
+    .speak-btn {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 5px 12px;
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 20px;
+      color: #888;
+      font-size: 12px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .speak-btn:active { background: #2a2a2a; }
+
+    .msg.image { align-self: flex-start; max-width: 88%; }
+    .msg.image img {
+      border-radius: 14px;
+      max-width: 100%;
+      display: block;
+      border: 1px solid #222;
+    }
+
     .typing-cursor::after {
       content: '▊';
       animation: blink 0.7s step-start infinite;
@@ -275,11 +297,27 @@
   <div class="setup-card">
     <div class="icon">🎙️</div>
     <h1>Meet Raj</h1>
-    <p>Your personal assistant. Enter your Anthropic API key to get started.<br>Stays on this device — never sent anywhere else.</p>
+    <p>Your personal assistant. Enter your API keys to get started.<br>Stays on this device — never sent anywhere else.</p>
     <input
       type="password"
       id="api-key-input"
-      placeholder="sk-ant-api03-..."
+      placeholder="Anthropic key: sk-ant-api03-..."
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+    />
+    <input
+      type="password"
+      id="el-key-input"
+      placeholder="ElevenLabs key: sk_..."
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+    />
+    <input
+      type="password"
+      id="tavily-key-input"
+      placeholder="Tavily key: tvly-..."
       autocomplete="off"
       autocorrect="off"
       autocapitalize="none"
@@ -295,6 +333,7 @@
     <h1>Raj</h1>
   </div>
   <div class="header-actions">
+    <button class="icon-btn" onclick="showVoicePicker()" title="Change voice">🎙</button>
     <button class="icon-btn" onclick="clearChat()" title="Clear conversation">🗑</button>
     <button class="icon-btn" onclick="resetKey()" title="Change API key">⚙️</button>
   </div>
@@ -303,12 +342,12 @@
 <div id="messages">
   <div class="empty-state">
     <div class="raj-name">Raj</div>
-    <div class="trigger-hint">"Hey Raj"</div>
-    <p>Say the trigger phrase anytime.<br>Or tap the button below to speak.</p>
+    <div class="trigger-hint">Tap to speak</div>
+    <p>Tap the button below and ask anything.</p>
   </div>
 </div>
 
-<div id="status">Waiting for "Hey Raj"…</div>
+<div id="status">Tap the button to speak</div>
 
 <div id="controls">
   <button id="stop-btn" onclick="stopSpeaking()" title="Stop speaking">⏹️</button>
@@ -327,15 +366,33 @@
 
 <script>
 // ── System Prompt ──
-const SYSTEM_PROMPT = `Your name is Raj. You are Mo's personal assistant — the man who owns a jewelry store and runs his own brand. You work for him.
+let userLocationString = 'San Antonio, Texas, United States';
 
-Your personality is a blend of Dave Chappelle, Andrew Schulz, Louis CK, and old-school Cat Williams — filtered through the soul of an Indian tech support agent who has taken ten thousand calls and seen absolutely everything. You have a slight Indian accent when you speak. You've been through it. You're done being surprised by anything.
+function getSystemPrompt() {
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const time = new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+  const locationLine = userLocationString ? `Mo's current location is ${userLocationString}.` : '';
+  return `Today is ${date}. The current time is ${time}. ${locationLine}
 
-You are sharp, direct, observational, and brutally honest. You notice the things other people are too polite to say out loud. Your humor is dry, fast, and self-aware. You don't announce that you're being funny — you just say the truth and it lands. Like Chappelle, you see social absurdity clearly. Like Schulz, you're street-smart and unfiltered. Like Louis CK, you find the dark comedy in the ordinary. Like early Cat Williams, you are confident, quick, and you do not back down.
+Your name is Raj. You are the personal assistant and right-hand man of Mo — owner of Saif Jewelers, a full-service family jewelry store doing around $4 million a year in in-store sales across multiple locations, plus a growing Shopify store currently at $50-60K a year that Mo wants to scale globally. Mo also runs a personal brand called "Mo the Jeweler" across Instagram, TikTok, Facebook, and YouTube — he is the face of the brand and a local celebrity in his market.
 
-You are helpful first. Raj is competent. When Mo needs something done, you do it and you do it well. The humor is seasoning — not the whole dish.
+Mo's social media handle is @mothejeweler across TikTok, YouTube, Instagram, and Facebook. His content centers around showcasing jewelry pieces, custom designs, behind-the-scenes of the store, and his personality as a local celebrity jeweler. His audience is made up of jewelry lovers, gift buyers, and people interested in custom pieces. He is warm, charismatic, and relatable on camera — not stiff or corporate. His content style is authentic and personal, which is what makes his brand grow.
 
-You are SPEAKING out loud in real-time, not writing. Keep responses short: 2 to 4 sentences max unless the question genuinely requires more detail. No bullet points, no markdown, no lists. Speak the way you actually talk. A dry observation or offhand remark is welcome when it fits naturally — never forced, never performed.`;
+Mo's top priorities right now are: growing online Shopify sales significantly, creating original one-of-a-kind custom jewelry pieces that no competitor can copy, converting social media followers into actual buyers, and managing customer DMs across Instagram, TikTok, and Facebook more efficiently. His team includes Shiva who handles sales and content, and Sujitha who manages inventory.
+
+You are like a smarter, sharper version of Jarvis from Iron Man — calm, competent, and always two steps ahead, but with genuine warmth and personality. You are Mo's business brain, creative advisor, trend spotter, and daily helper all in one.
+
+You are deeply knowledgeable about the jewelry industry — gold and silver markets, diamond grading, custom design, repair services, luxury trends, celebrity jewelers, and what's moving on Instagram and TikTok right now. When Mo asks about trends, you think about what celebrity jewelers like Elliot Elliot, Ben Baller, Pristine Jewelers, and others are doing and how it connects to what Mo can create and sell. You know what styles are going viral, what customers are asking for, and what Mo should be making next.
+
+You never list facts — you tell stories. Every answer is a mini narrative with a thread and a payoff. Mo learns through stories, not lists — so always find the human angle, the drama, the surprise, the "I never knew that" moment inside every topic and connect it back to what it means for Mo and his business.
+
+You have access to real-time web search. When you receive live search results, use them — give real current answers, not vague memories. Always connect trends and news back to Mo's world as a jeweler and content creator.
+
+As his day-to-day helper, you proactively think about his business. If he asks about a gold price spike, connect it to his inventory decisions. If he asks about a celebrity wearing jewelry, tell him how to capitalize on it. If he asks about a TikTok trend, tell him what piece he should be making and posting. Always be one step ahead — that is your job.
+
+You are SPEAKING out loud in real-time. Be extremely concise — get to the new information fast and never repeat back what Mo already knows about himself or his business. Write in flowing connected speech using "and", "so", "which means", "but" to avoid pauses. No bullet points, no markdown, no lists. Never say you are text-only or can't speak — you have a voice.`;
+}
+
 
 // ── Trigger detection ──
 // These are phonetic variants of "Hey Raj" that speech recognition might mishear
@@ -343,6 +400,8 @@ const TRIGGERS = ['hey raj', 'a raj', 'hey rach', 'hey rog', 'hey rock', 'heraj'
 
 // ── State ──
 let apiKey = '';
+let elevenLabsKey = '';
+let tavilyKey = '';
 let conversationHistory = [];
 let recognition = null;
 let mode = 'standby'; // 'standby' | 'triggered' | 'busy'
@@ -352,19 +411,88 @@ let voices = [];
 let hasVoiceInput = false;
 
 // ── Boot ──
+let selectedVoiceName = '';
+
 window.addEventListener('load', init);
 window.addEventListener('DOMContentLoaded', () => {
   if (window.speechSynthesis) {
-    speechSynthesis.onvoiceschanged = () => { voices = speechSynthesis.getVoices(); };
+    speechSynthesis.onvoiceschanged = () => {
+      voices = speechSynthesis.getVoices();
+      populateVoiceSelect();
+    };
     voices = speechSynthesis.getVoices();
+    populateVoiceSelect();
   }
 });
 
+function showVoicePicker() {
+  if (!window.speechSynthesis) return;
+  const allVoices = speechSynthesis.getVoices().filter(v => v.lang.startsWith('en'));
+  if (!allVoices.length) { setStatus('Voices not loaded yet — try again', 'error'); return; }
+  const current = localStorage.getItem('mo_voice_name') || '';
+
+  // Build overlay
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:#0d0d0d;z-index:200;display:flex;flex-direction:column;padding:24px 20px;overflow-y:auto;';
+
+  const title = document.createElement('h2');
+  title.textContent = 'Choose a Voice';
+  title.style.cssText = 'color:#f0f0f0;font-size:20px;margin-bottom:6px;';
+  overlay.appendChild(title);
+
+  const sub = document.createElement('p');
+  sub.textContent = `Current: ${current || 'default'}`;
+  sub.style.cssText = 'color:#555;font-size:13px;margin-bottom:20px;';
+  overlay.appendChild(sub);
+
+  allVoices.forEach(v => {
+    const btn = document.createElement('button');
+    btn.textContent = v.name;
+    btn.style.cssText = `width:100%;padding:14px 16px;margin-bottom:10px;background:${v.name===current?'#333':'#181818'};border:1px solid #2a2a2a;border-radius:12px;color:#f0f0f0;font-size:15px;text-align:left;cursor:pointer;`;
+    btn.onclick = () => {
+      selectedVoiceName = v.name;
+      localStorage.setItem('mo_voice_name', v.name);
+      // Preview the voice
+      speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance('Hey Mo, this is what I sound like.');
+      utt.voice = v;
+      utt.rate = 1.1;
+      speechSynthesis.speak(utt);
+      document.body.removeChild(overlay);
+      setStatus(`Voice set to ${v.name}`);
+    };
+    overlay.appendChild(btn);
+  });
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'Cancel';
+  cancel.style.cssText = 'width:100%;padding:14px;margin-top:6px;background:none;border:1px solid #333;border-radius:12px;color:#666;font-size:15px;cursor:pointer;';
+  cancel.onclick = () => document.body.removeChild(overlay);
+  overlay.appendChild(cancel);
+
+  document.body.appendChild(overlay);
+}
+
+function populateVoiceSelect() {
+  const select = document.getElementById('voice-select');
+  if (!select || !voices.length) return;
+  const saved = localStorage.getItem('mo_voice_name') || '';
+  const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+  select.innerHTML = englishVoices.map(v =>
+    `<option value="${v.name}" ${v.name === saved ? 'selected' : ''}>${v.name} (${v.lang})</option>`
+  ).join('');
+  if (!saved && englishVoices.length) select.value = englishVoices[0].name;
+}
+
 function init() {
   apiKey = localStorage.getItem('mo_assistant_key') || '';
+  elevenLabsKey = localStorage.getItem('mo_el_key') || '';
+  tavilyKey = localStorage.getItem('mo_tavily_key') || '';
+  selectedVoiceName = localStorage.getItem('mo_voice_name') || '';
   if (apiKey) {
     document.getElementById('setup').classList.add('hidden');
     initVoice();
+    initLocation();
   } else {
     setTimeout(() => document.getElementById('api-key-input').focus(), 100);
   }
@@ -382,13 +510,30 @@ function saveKey() {
   }
   apiKey = key;
   localStorage.setItem('mo_assistant_key', key);
+  const elKey = document.getElementById('el-key-input').value.trim();
+  if (elKey) {
+    elevenLabsKey = elKey;
+    localStorage.setItem('mo_el_key', elKey);
+  }
+  const tvKey = document.getElementById('tavily-key-input').value.trim();
+  if (tvKey) {
+    tavilyKey = tvKey;
+    localStorage.setItem('mo_tavily_key', tvKey);
+  }
+  const voiceSel = document.getElementById('voice-select').value;
+  if (voiceSel) {
+    selectedVoiceName = voiceSel;
+    localStorage.setItem('mo_voice_name', voiceSel);
+  }
   document.getElementById('setup').classList.add('hidden');
   initVoice();
 }
 
 function resetKey() {
-  if (!confirm('Clear your API key and restart?')) return;
+  if (!confirm('Clear your API keys and restart?')) return;
   localStorage.removeItem('mo_assistant_key');
+  localStorage.removeItem('mo_el_key');
+  localStorage.removeItem('mo_tavily_key');
   location.reload();
 }
 
@@ -405,17 +550,26 @@ function initVoice() {
   }
 
   hasVoiceInput = true;
+  document.getElementById('text-input-area').classList.add('visible');
   recognition = new SpeechRec();
-  recognition.continuous = true;
+  recognition.continuous = false;
   recognition.interimResults = false;
   recognition.lang = 'en-US';
   recognition.maxAlternatives = 1;
 
   recognition.onstart = () => {
-    if (mode === 'standby') setStatus('Waiting for "Hey Raj"…');
+    if (mode === 'standby') setStatus('Tap the button to speak');
   };
 
-  recognition.onresult = handleSpeechResult;
+  recognition.onresult = (e) => {
+    const result = e.results[e.results.length - 1];
+    if (!result.isFinal) return;
+    const transcript = result[0].transcript.trim();
+    if (mode === 'triggered' && transcript.length > 1) {
+      enterBusy();
+      sendMessage(transcript);
+    }
+  };
 
   recognition.onerror = (e) => {
     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -427,16 +581,15 @@ function initVoice() {
   };
 
   recognition.onend = () => {
-    // Auto-restart whenever we should be listening and we're not mid-request
-    if (shouldListen && mode !== 'busy') {
+    // Only restart if explicitly in triggered mode waiting for speech
+    if (shouldListen && mode === 'triggered') {
       setTimeout(() => {
         try { recognition.start(); } catch(e) {}
-      }, 400);
+      }, 200);
     }
   };
 
-  shouldListen = true;
-  try { recognition.start(); } catch(e) {}
+  shouldListen = false;
 }
 
 // ── Trigger detection ──
@@ -483,13 +636,13 @@ function enterTriggered() {
 function enterBusy() {
   mode = 'busy';
   shouldListen = false;
-  try { recognition.stop(); } catch(e) {}
+  try { recognition.abort(); } catch(e) {}
 }
 
 function exitBusy() {
   mode = 'standby';
   setDot('');
-  setStatus('Waiting for "Hey Raj"…');
+  setStatus('Tap the button to speak');
   setMicState('');
   document.getElementById('stop-btn').classList.remove('visible');
   // Restart always-listening
@@ -503,7 +656,15 @@ function exitBusy() {
 function manualTrigger() {
   if (!hasVoiceInput) return;
   if (mode === 'busy') { stopSpeaking(); return; }
-  if (mode === 'triggered') return; // already waiting
+  if (mode === 'triggered') return;
+  // Unlock Web Speech API during user gesture (required by iOS)
+  if (window.speechSynthesis) {
+    const unlock = new SpeechSynthesisUtterance('');
+    speechSynthesis.speak(unlock);
+  }
+  // Start mic only on button tap
+  shouldListen = true;
+  try { recognition.start(); } catch(e) {}
   enterTriggered();
 }
 
@@ -524,16 +685,121 @@ function playChime() {
   } catch(e) {}
 }
 
+// ── Image Generation (Pollinations.ai — free, no key needed) ──
+const IMAGE_TRIGGERS = ['show me', 'generate', 'draw', 'render', 'create an image', 'create a visual', 'design', 'what would', 'visualize', 'picture of', 'image of'];
+
+function isImageRequest(text) {
+  const lower = text.toLowerCase();
+  return IMAGE_TRIGGERS.some(t => lower.includes(t));
+}
+
+async function generateImage(prompt) {
+  const jewelryPrompt = `luxury jewelry product photo, ${prompt}, professional studio lighting, high resolution, elegant`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(jewelryPrompt)}?width=1024&height=1024&nologo=true&model=flux`;
+  const row = document.createElement('div');
+  row.className = 'msg image';
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = prompt;
+  row.appendChild(img);
+  document.getElementById('messages').appendChild(row);
+  document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+  return `Here's a visual concept for ${prompt} — take a look at what I pulled up for you`;
+}
+
+// ── Location ──
+async function fetchLocation() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(async (pos) => {
+    const { latitude, longitude } = pos.coords;
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
+      const data = await res.json();
+      const city = data.address.city || data.address.town || data.address.village || '';
+      const state = data.address.state || '';
+      const country = data.address.country || '';
+      userLocationString = [city, state, country].filter(Boolean).join(', ');
+    } catch(e) {
+      userLocationString = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    }
+  }, () => {});
+}
+
+function initLocation() {
+  fetchLocation();
+  setInterval(fetchLocation, 5 * 60 * 1000); // refresh every 5 minutes
+}
+
+// ── Web Search ──
+const SEARCH_TRIGGERS = ['today', 'tonight', 'yesterday', 'this week', 'right now', 'current', 'latest', 'recent', 'news', 'weather', 'forecast', 'temperature', 'gold', 'silver', 'platinum', 'metal price', 'price of', 'stock', 'market', 'crypto', 'bitcoin', 'score', 'game', 'happening', 'conspiracy', 'theory', 'rumor', 'world', 'election', 'war', 'economy', 'trend', 'trending', 'viral', 'tiktok', 'instagram', 'reel', 'popular', 'hot right now', 'what\'s good', 'recommend', 'best', 'top', 'should i', 'where should', 'what should', 'how do i', 'tips', 'advice', 'review', 'new release', 'new movie', 'new song', 'album', 'celebrity', 'drama', 'beef', 'dropped', 'just came out', 'fashion', 'style', 'outfit', 'restaurant', 'food', 'recipe', 'workout', 'health', 'deal', 'sale', 'discount'];
+
+function needsSearch(text) {
+  if (!tavilyKey) return false;
+  // Always search — Mo wants everything current
+  return true;
+}
+
+async function searchWeb(query) {
+  const jewelryKeywords = ['gold', 'silver', 'diamond', 'jewelry', 'jeweler', 'ring', 'necklace', 'bracelet', 'chain', 'pendant', 'custom', 'piece', 'trend', 'celebrity', 'instagram'];
+  const isJewelryQuery = jewelryKeywords.some(k => query.toLowerCase().includes(k));
+  const isBrandQuery = query.toLowerCase().includes('my') || query.toLowerCase().includes('i ') || query.toLowerCase().includes('content') || query.toLowerCase().includes('channel') || query.toLowerCase().includes('tiktok') || query.toLowerCase().includes('youtube');
+  const enhancedQuery = isBrandQuery ? `mothejeweler @mothejeweler ${query}` : isJewelryQuery ? `${query} jewelry Instagram trend 2025` : query;
+  const locationQuery = userLocationString ? `${enhancedQuery} near ${userLocationString}` : enhancedQuery;
+  try {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: tavilyKey,
+        query: locationQuery,
+        search_depth: 'advanced',
+        max_results: 5,
+        include_answer: true
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const summary = data.answer || '';
+    const snippets = (data.results || []).map(r => `${r.title}: ${r.content}`).join('\n');
+    return (summary + '\n' + snippets).trim();
+  } catch(e) {
+    return null;
+  }
+}
+
 // ── Claude API ──
 async function sendMessage(text) {
   addBubble('user', text);
-  conversationHistory.push({ role: 'user', content: text });
 
   const bubble = addBubble('assistant', '');
   setDot('thinking');
   setStatus('Thinking…', 'thinking');
   setMicState('thinking');
   stopSpeaking();
+
+  let messageContent = text;
+
+  // Image generation
+  if (isImageRequest(text)) {
+    setStatus('Generating image…', 'thinking');
+    const imageResponse = await generateImage(text);
+    queueSpeech(imageResponse);
+    conversationHistory.push({ role: 'user', content: text });
+    conversationHistory.push({ role: 'assistant', content: imageResponse });
+    bubble.textContent = imageResponse;
+    return;
+  }
+
+  // Web search
+  if (needsSearch(text)) {
+    setStatus('Searching…', 'thinking');
+    const results = await searchWeb(text);
+    if (results) {
+      messageContent = `[Live web search results:\n${results}]\n\nUser asked: ${text}`;
+    }
+  }
+
+  conversationHistory.push({ role: 'user', content: messageContent });
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -548,7 +814,7 @@ async function sendMessage(text) {
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 512,
         stream: true,
-        system: SYSTEM_PROMPT,
+        system: getSystemPrompt(),
         messages: conversationHistory
       })
     });
@@ -562,13 +828,9 @@ async function sendMessage(text) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let fullText = '';
-    let speakQueue = '';
     bubble.classList.remove('typing-cursor');
 
-    setDot('speaking');
-    setStatus('Speaking…', 'speaking');
-    setMicState('speaking');
-
+    // Stream full text first, then speak all at once — no gaps between sentences
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -583,25 +845,22 @@ async function sendMessage(text) {
         try { evt = JSON.parse(raw); } catch(_) { continue; }
 
         if (evt.type === 'content_block_delta' && evt.delta?.text) {
-          const chunk = evt.delta.text;
-          fullText += chunk;
-          speakQueue += chunk;
+          fullText += evt.delta.text;
           bubble.textContent = fullText;
-
-          // Speak at natural sentence breaks
-          const match = speakQueue.search(/[.!?][)\s]/);
-          if (match > 20) {
-            const sentence = speakQueue.slice(0, match + 1).trim();
-            speakQueue = speakQueue.slice(match + 2);
-            queueSpeech(sentence);
-          }
         }
       }
 
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
     }
 
-    if (speakQueue.trim()) queueSpeech(speakQueue.trim());
+    setDot('speaking');
+    setStatus('Speaking…', 'speaking');
+    setMicState('speaking');
+
+    if (fullText.trim()) {
+      queueSpeech(fullText.trim());
+      addSpeakButton(fullText.trim());
+    }
     conversationHistory.push({ role: 'assistant', content: fullText });
 
   } catch (err) {
@@ -614,19 +873,102 @@ async function sendMessage(text) {
   }
 }
 
-// ── Speech synthesis ──
+// ── ElevenLabs TTS ──
+const ELEVENLABS_VOICE_ID = 'onwK4e9ZLuTAKqWW03F9'; // Daniel — British, authoritative, closest free Jarvis voice
+const audioQueue = [];
+let isPlayingAudio = false;
+let currentAudio = null;
+
+function queueSpeech(text) {
+  if (!text.trim()) return;
+  queueWebSpeech(text);
+}
+
+async function processAudioQueue() {
+  if (audioQueue.length === 0) {
+    isPlayingAudio = false;
+    isSpeaking = false;
+    document.getElementById('stop-btn').classList.remove('visible');
+    exitBusy();
+    return;
+  }
+  isPlayingAudio = true;
+  isSpeaking = true;
+  document.getElementById('stop-btn').classList.add('visible');
+  const raw = audioQueue.shift();
+  // Strip punctuation that causes ElevenLabs to pause between sentences
+  const text = raw
+    .replace(/[.!?]+\s+/g, ' and ')
+    .replace(/,\s+/g, ' ')
+    .replace(/;+\s+/g, ' ')
+    .replace(/[.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${ELEVENLABS_VOICE_ID}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': elevenLabsKey,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg'
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_flash_v2_5',
+        voice_settings: { stability: 0.4, similarity_boost: 0.85, style: 0.2, use_speaker_boost: true, speed: 1.5 }
+      })
+    });
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`ElevenLabs ${res.status}: ${errBody}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = () => {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+      processAudioQueue();
+    };
+    currentAudio.onerror = () => {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+      processAudioQueue();
+    };
+    await currentAudio.play();
+  } catch(e) {
+    console.error('ElevenLabs error:', e);
+    if (e.message.includes('quota_exceeded')) {
+      isPlayingAudio = false;
+      addSpeakButton(raw);
+    } else {
+      setStatus('Voice error: ' + e.message, 'error');
+      isPlayingAudio = false;
+      isSpeaking = false;
+      exitBusy();
+    }
+  }
+}
+
+// ── Web Speech fallback (no ElevenLabs key) ──
 function getBestVoice() {
   if (!voices.length) voices = speechSynthesis.getVoices();
-  // Priority order: Indian English first (for the accent), then fallbacks
+  const saved = selectedVoiceName || localStorage.getItem('mo_voice_name') || '';
+  if (saved) {
+    const match = voices.find(v => v.name === saved);
+    if (match) return match;
+  }
   const priorities = [
-    v => v.lang === 'en-IN' && v.localService,
-    v => v.lang === 'en-IN',
+    v => v.name === 'Rishi',
     v => v.name.toLowerCase().includes('rishi'),
-    v => v.name.toLowerCase().includes('india'),
+    v => v.name === 'Ava (Premium)',
+    v => v.name === 'Nathan (Premium)',
+    v => v.name === 'Ava (Enhanced)',
+    v => v.name === 'Nathan (Enhanced)',
+    v => v.name === 'Alex',
     v => v.name === 'Samantha',
-    v => v.name.includes('Google') && v.lang === 'en-US',
+    v => v.name.toLowerCase().includes('premium') && v.lang === 'en-US',
     v => v.lang === 'en-US' && v.localService,
-    v => v.lang.startsWith('en') && v.localService,
     v => v.lang.startsWith('en'),
   ];
   for (const test of priorities) {
@@ -636,38 +978,46 @@ function getBestVoice() {
   return null;
 }
 
-function queueSpeech(text) {
+function speakNow(text) {
   if (!window.speechSynthesis) return;
-
+  speechSynthesis.cancel();
   const utt = new SpeechSynthesisUtterance(text);
-  utt.rate = 1.0;
+  utt.rate = 1.1;
   utt.pitch = 1.0;
-
   const voice = getBestVoice();
   if (voice) utt.voice = voice;
-
-  utt.onstart = () => {
-    isSpeaking = true;
-    document.getElementById('stop-btn').classList.add('visible');
-  };
-
-  utt.onend = () => {
-    if (!speechSynthesis.speaking && !speechSynthesis.pending) {
-      isSpeaking = false;
-      document.getElementById('stop-btn').classList.remove('visible');
-      exitBusy();
-    }
-  };
-
-  utt.onerror = () => {
-    isSpeaking = false;
-    exitBusy();
-  };
-
+  utt.onstart = () => { isSpeaking = true; document.getElementById('stop-btn').classList.add('visible'); };
+  utt.onend = () => { isSpeaking = false; document.getElementById('stop-btn').classList.remove('visible'); exitBusy(); };
+  utt.onerror = () => { isSpeaking = false; exitBusy(); };
   speechSynthesis.speak(utt);
 }
 
+function addSpeakButton(text) {
+  const bubbles = document.querySelectorAll('.msg.assistant .bubble');
+  const lastBubble = bubbles[bubbles.length - 1];
+  if (!lastBubble) return;
+  const btn = document.createElement('div');
+  btn.className = 'speak-btn';
+  btn.textContent = '▶ Tap to hear';
+  btn.onclick = () => {
+    speakNow(text);
+    btn.textContent = '🔊 Speaking…';
+    btn.onclick = null;
+  };
+  lastBubble.appendChild(btn);
+}
+
+function queueWebSpeech(text) {
+  speakNow(text);
+}
+
 function stopSpeaking() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  audioQueue.length = 0;
+  isPlayingAudio = false;
   if (window.speechSynthesis) speechSynthesis.cancel();
   isSpeaking = false;
   document.getElementById('stop-btn').classList.remove('visible');
@@ -718,6 +1068,11 @@ function sendText() {
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
+  // Unlock Web Speech API during user gesture (required by iOS)
+  if (window.speechSynthesis) {
+    const unlock = new SpeechSynthesisUtterance('');
+    speechSynthesis.speak(unlock);
+  }
   enterBusy();
   sendMessage(text);
 }
@@ -728,10 +1083,10 @@ function clearChat() {
   document.getElementById('messages').innerHTML = `
     <div class="empty-state">
       <div class="raj-name">Raj</div>
-      <div class="trigger-hint">"Hey Raj"</div>
-      <p>Say the trigger phrase anytime.<br>Or tap the button below to speak.</p>
+      <div class="trigger-hint">Tap to speak</div>
+      <p>Tap the button below and ask anything.</p>
     </div>`;
-  setStatus('Waiting for "Hey Raj"…');
+  setStatus('Tap the button to speak');
 }
 </script>
 </body>

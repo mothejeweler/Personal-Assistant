@@ -1,0 +1,2 @@
+web: gunicorn --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT main:app
+worker: python -c "from raj_core.jobs import start_scheduler; start_scheduler()"
