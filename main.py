@@ -408,7 +408,6 @@ async def test_voice(request: Request):
             content=audio_bytes,
             media_type=content_type,
             headers={
-                "X-Raj-Text": raj_text[:2000],
                 "Content-Disposition": 'inline; filename="raj-response.mp3"',
             },
         )
