@@ -10,7 +10,7 @@ import os
 import json
 import logging
 import asyncio
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Response
 from anthropic import Anthropic
 import requests
 from dotenv import load_dotenv
@@ -46,10 +46,16 @@ try:
 except ImportError:
     PersonalityVideoUpdater = None
 
+try:
+    from voice_synth import VoiceSynthesizer
+except ImportError:
+    VoiceSynthesizer = None
+
 YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
 YOUTUBE_CHANNEL_RSS_URL = os.getenv("YOUTUBE_CHANNEL_RSS_URL", "")
 PERSONALITY_REFRESH_MINUTES = int(os.getenv("PERSONALITY_REFRESH_MINUTES", "60"))
 ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+VOICE_PROVIDER = os.getenv("VOICE_PROVIDER", "none")
 
 video_updater = None
 if PersonalityVideoUpdater is not None:
@@ -59,6 +65,8 @@ if PersonalityVideoUpdater is not None:
     )
 
 sync_task = None
+
+voice_synth = VoiceSynthesizer(provider=VOICE_PROVIDER) if VoiceSynthesizer else None
 
 
 def build_runtime_system_prompt() -> str:
@@ -288,6 +296,15 @@ async def admin_personality_status(request: Request):
     }
 
 
+@app.get("/admin/voice/status")
+async def admin_voice_status(request: Request):
+    """Show current Raj voice provider readiness."""
+    _check_admin_key(request)
+    if not voice_synth:
+        return {"status": "disabled", "reason": "voice_synth_unavailable"}
+    return {"status": "ok", "voice": voice_synth.status()}
+
+
 # ============================================================================
 # TEST ENDPOINT (for manual testing)
 # ============================================================================
@@ -321,6 +338,37 @@ async def test_message(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/test/voice")
+async def test_voice(request: Request):
+    """Generate Raj text response and synthesize it to voice audio."""
+    if not voice_synth:
+        raise HTTPException(status_code=503, detail="Voice synth module unavailable")
+
+    try:
+        data = await request.json()
+        user_message = (data.get("message") or "").strip()
+
+        if not user_message:
+            raise HTTPException(status_code=400, detail="Message field required")
+
+        raj_text = await generate_response(user_message)
+        audio_bytes, content_type = voice_synth.synthesize(raj_text)
+
+        return Response(
+            content=audio_bytes,
+            media_type=content_type,
+            headers={
+                "X-Raj-Text": raj_text[:2000],
+                "Content-Disposition": 'inline; filename="raj-response.mp3"',
+            },
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in voice test endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # CONVERSATION HISTORY (for future multi-turn support)
 # ============================================================================
@@ -349,6 +397,8 @@ async def startup_event():
     logger.info(f"API Key configured: {bool(ANTHROPIC_API_KEY)}")
     logger.info(f"Facebook tokens configured: {bool(FACEBOOK_PAGE_ACCESS_TOKEN and FACEBOOK_WEBHOOK_VERIFY_TOKEN)}")
     logger.info(f"System prompt loaded: {len(RAJ_SYSTEM_PROMPT)} characters")
+    if voice_synth:
+        logger.info("Voice provider status: %s", voice_synth.status())
 
     if video_updater and video_updater.enabled():
         # One immediate sync at startup, then background polling.
