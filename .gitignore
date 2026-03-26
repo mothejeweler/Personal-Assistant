@@ -5,3 +5,5 @@ CLAUDE.local.md
 node_modules/
 .DS_Store
 **/.DS_Store
+data/video_personality_state.json
+data/personality_delta.md

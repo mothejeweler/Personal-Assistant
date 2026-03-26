@@ -9,6 +9,7 @@ responds with Claude using Mo's complete personality profile.
 import os
 import json
 import logging
+import asyncio
 from fastapi import FastAPI, Request, HTTPException
 from anthropic import Anthropic
 import requests
@@ -39,6 +40,67 @@ try:
 except ImportError:
     logger.warning("Could not import personality module, using fallback system prompt")
     RAJ_SYSTEM_PROMPT = "You are Raj, an AI assistant trained to sound like Mo The Jeweler, owner of Saif Jewelers in Texas. Be authentic, transparent, and helpful when discussing jewelry, pricing, and custom services."
+
+try:
+    from video_personality_updater import PersonalityVideoUpdater
+except ImportError:
+    PersonalityVideoUpdater = None
+
+YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
+YOUTUBE_CHANNEL_RSS_URL = os.getenv("YOUTUBE_CHANNEL_RSS_URL", "")
+PERSONALITY_REFRESH_MINUTES = int(os.getenv("PERSONALITY_REFRESH_MINUTES", "60"))
+ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+
+video_updater = None
+if PersonalityVideoUpdater is not None:
+    video_updater = PersonalityVideoUpdater(
+        channel_id=YOUTUBE_CHANNEL_ID,
+        rss_url=YOUTUBE_CHANNEL_RSS_URL,
+    )
+
+sync_task = None
+
+
+def build_runtime_system_prompt() -> str:
+    """Build the current system prompt including fresh personality deltas from new videos."""
+    if not video_updater:
+        return RAJ_SYSTEM_PROMPT
+
+    delta = video_updater.get_runtime_delta_text(max_chars=6000)
+    if not delta:
+        return RAJ_SYSTEM_PROMPT
+
+    return (
+        f"{RAJ_SYSTEM_PROMPT}\n\n"
+        "---\n"
+        "LATEST VOICE DELTAS FROM NEW VIDEOS\n"
+        "Apply these as incremental adjustments to the base voice.\n\n"
+        f"{delta}"
+    )
+
+
+def _check_admin_key(request: Request) -> None:
+    if not ADMIN_API_KEY:
+        return
+    incoming = request.headers.get("x-admin-key", "")
+    if incoming != ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+
+async def personality_sync_loop() -> None:
+    """Background loop: keeps Raj updated when new channel videos are posted."""
+    if not video_updater or not video_updater.enabled():
+        logger.info("Video personality sync loop not started (missing channel config).")
+        return
+
+    while True:
+        try:
+            result = video_updater.sync_once(max_new_videos=3)
+            logger.info("Video personality sync result: %s", result)
+        except Exception as e:
+            logger.error("Video personality sync failed: %s", e, exc_info=True)
+
+        await asyncio.sleep(max(PERSONALITY_REFRESH_MINUTES, 5) * 60)
 
 
 # ============================================================================
@@ -129,10 +191,11 @@ async def generate_response(user_message: str) -> str:
         Response text in Mo's voice
     """
     try:
+        runtime_system_prompt = build_runtime_system_prompt()
         response = client.messages.create(
             model="claude-3-5-haiku-20241022",
             max_tokens=1024,
-            system=RAJ_SYSTEM_PROMPT,
+            system=runtime_system_prompt,
             messages=[
                 {
                     "role": "user",
@@ -168,7 +231,8 @@ async def send_facebook_message(recipient_id: str, message_text: str) -> bool:
     Returns:
         True if sent successfully, False otherwise
     """
-    url = "https://graph.instagram.com/v18.0/me/messages"
+    # Facebook Messenger Send API endpoint
+    url = "https://graph.facebook.com/v18.0/me/messages"
     
     headers = {
         "Content-Type": "application/json"
@@ -192,6 +256,36 @@ async def send_facebook_message(recipient_id: str, message_text: str) -> bool:
     except Exception as e:
         logger.error(f"Error sending message to Facebook: {str(e)}")
         return False
+
+
+@app.post("/admin/personality/sync")
+async def admin_sync_personality(request: Request):
+    """Manually trigger sync from newly posted channel videos."""
+    _check_admin_key(request)
+    if not video_updater:
+        return {"status": "disabled", "reason": "updater_not_available"}
+
+    result = video_updater.sync_once(max_new_videos=5)
+    return result
+
+
+@app.get("/admin/personality/status")
+async def admin_personality_status(request: Request):
+    """Show auto-update configuration and latest sync metadata."""
+    _check_admin_key(request)
+    if not video_updater:
+        return {"status": "disabled", "reason": "updater_not_available"}
+
+    state = video_updater.load_state()
+    return {
+        "status": "ok",
+        "enabled": video_updater.enabled(),
+        "refresh_minutes": PERSONALITY_REFRESH_MINUTES,
+        "rss_url": video_updater.rss_url,
+        "processed_video_count": len(state.get("processed_video_ids", [])),
+        "last_sync_at": state.get("last_sync_at"),
+        "last_success_at": state.get("last_success_at"),
+    }
 
 
 # ============================================================================
@@ -220,6 +314,8 @@ async def test_message(request: Request):
             "user_message": user_message,
             "raj_response": response
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in test endpoint: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -248,15 +344,31 @@ def get_or_create_conversation(user_id: str):
 @app.on_event("startup")
 async def startup_event():
     """Log startup"""
+    global sync_task
     logger.info("🔥 Raj Assistant starting up...")
     logger.info(f"API Key configured: {bool(ANTHROPIC_API_KEY)}")
     logger.info(f"Facebook tokens configured: {bool(FACEBOOK_PAGE_ACCESS_TOKEN and FACEBOOK_WEBHOOK_VERIFY_TOKEN)}")
     logger.info(f"System prompt loaded: {len(RAJ_SYSTEM_PROMPT)} characters")
 
+    if video_updater and video_updater.enabled():
+        # One immediate sync at startup, then background polling.
+        try:
+            logger.info("Running startup personality sync from channel videos...")
+            startup_result = video_updater.sync_once(max_new_videos=5)
+            logger.info("Startup sync result: %s", startup_result)
+        except Exception as e:
+            logger.error("Startup personality sync failed: %s", e, exc_info=True)
+
+        sync_task = asyncio.create_task(personality_sync_loop())
+        logger.info("Background personality sync loop started (%s min).", PERSONALITY_REFRESH_MINUTES)
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Log shutdown"""
+    global sync_task
+    if sync_task:
+        sync_task.cancel()
     logger.info("🔥 Raj Assistant shutting down...")
 
 
