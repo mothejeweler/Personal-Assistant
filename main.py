@@ -242,7 +242,7 @@ async def verify_facebook_webhook(request: Request):
     
     if verify_token == FACEBOOK_WEBHOOK_VERIFY_TOKEN:
         logger.info("Webhook verified successfully")
-        return int(challenge)
+        return Response(content=challenge, media_type="text/plain")
     else:
         logger.error("Webhook verification failed - invalid token")
         raise HTTPException(status_code=403, detail="Invalid verification token")
