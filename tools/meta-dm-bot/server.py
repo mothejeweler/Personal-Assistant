@@ -18,6 +18,7 @@ VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
 FB_PAGE_ACCESS_TOKEN = os.getenv("META_FB_PAGE_ACCESS_TOKEN")
 IG_PAGE_ACCESS_TOKEN = os.getenv("META_IG_PAGE_ACCESS_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_DM_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"))
 
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -77,7 +78,7 @@ PRODUCT LINKS — use the most specific link possible:
 
 def generate_reply(message_text: str) -> str:
     response = anthropic_client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=ANTHROPIC_MODEL,
         max_tokens=300,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": message_text}]

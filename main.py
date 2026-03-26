@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request, HTTPException, Response
 from anthropic import Anthropic
 import requests
 from dotenv import load_dotenv
+from anthropic_utils import create_message_with_model_fallback, get_anthropic_model
 
 # Load environment variables from .env
 load_dotenv()
@@ -67,6 +68,7 @@ OWNER_FACEBOOK_IDS_RAW = os.getenv("OWNER_FACEBOOK_IDS", "")
 OWNER_FACEBOOK_IDS: Set[str] = {
     x.strip() for x in OWNER_FACEBOOK_IDS_RAW.split(",") if x.strip()
 }
+ANTHROPIC_MODEL = get_anthropic_model()
 
 video_updater = None
 if PersonalityVideoUpdater is not None:
@@ -236,8 +238,9 @@ async def generate_response(user_message: str) -> str:
     """
     try:
         runtime_system_prompt = build_runtime_system_prompt()
-        response = client.messages.create(
-            model="claude-3-5-haiku-20241022",
+        response = create_message_with_model_fallback(
+            client,
+            model=ANTHROPIC_MODEL,
             max_tokens=1024,
             system=runtime_system_prompt,
             messages=[

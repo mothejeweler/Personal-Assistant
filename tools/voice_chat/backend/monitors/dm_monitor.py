@@ -2,13 +2,16 @@
 DM Monitor - Analyzes incoming DMs to extract intent and score leads
 """
 
+import os
+import json
+from datetime import datetime, date
+
 from sqlalchemy.orm import Session
 from database.models import Conversation, Customer, DailyBenchmark
-from datetime import datetime, date
 from anthropic import Anthropic
-import json
 
 client = Anthropic()
+ANTHROPIC_ANALYSIS_MODEL = os.getenv("ANTHROPIC_ANALYSIS_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-7-sonnet-latest"))
 
 class DMMonitor:
     def __init__(self, db: Session):
@@ -56,7 +59,7 @@ class DMMonitor:
         """Use Claude to analyze a single message"""
         try:
             response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=ANTHROPIC_ANALYSIS_MODEL,
                 max_tokens=200,
                 system="""You are a jewelry sales analyst. Analyze the customer message and determine:
 1. Intent: 'inquiry', 'purchase_interest', 'custom_design', 'complaint', 'follow_up', 'other'

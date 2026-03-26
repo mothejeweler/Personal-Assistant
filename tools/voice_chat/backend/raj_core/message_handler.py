@@ -15,6 +15,7 @@ from integrations.twilio_handler import TwilioMessenger
 from datetime import datetime, timedelta
 
 client = Anthropic()
+ANTHROPIC_RESPONSE_MODEL = os.getenv("ANTHROPIC_RESPONSE_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-7-sonnet-latest"))
 
 class RajMessageHandler:
     def __init__(self, db: Session):
@@ -362,7 +363,7 @@ Should Raj respond? Reply here or check dashboard: {approval_url}
             ]
             
             response = client.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model=ANTHROPIC_RESPONSE_MODEL,
                 max_tokens=500,
                 system=system_prompt,
                 messages=messages

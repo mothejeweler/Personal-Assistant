@@ -18,9 +18,12 @@ from xml.etree import ElementTree as ET
 import requests
 from anthropic import Anthropic
 
+from anthropic_utils import create_message_with_model_fallback, get_anthropic_model
+
 logger = logging.getLogger(__name__)
 
 ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015"}
+ANTHROPIC_MODEL = get_anthropic_model()
 
 
 class PersonalityVideoUpdater:
@@ -126,8 +129,9 @@ class PersonalityVideoUpdater:
         if self.client is None:
             raise RuntimeError("Missing ANTHROPIC_API_KEY for personality video analysis")
 
-        result = self.client.messages.create(
-            model="claude-3-5-haiku-20241022",
+        result = create_message_with_model_fallback(
+            self.client,
+            model=ANTHROPIC_MODEL,
             max_tokens=500,
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],

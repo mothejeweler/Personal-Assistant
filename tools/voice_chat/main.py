@@ -32,6 +32,7 @@ app.add_middleware(
 
 # Initialize Claude client
 anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_DM_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"))
 
 # ============================================
 # HEALTH CHECK
@@ -89,7 +90,7 @@ async def handle_facebook_webhook(request: dict):
             # Generate response using Claude
             try:
                 response = anthropic_client.messages.create(
-                    model="claude-haiku-4-5-20251001",
+                    model=ANTHROPIC_MODEL,
                     max_tokens=300,
                     system=RAJ_BASE_PERSONALITY,
                     messages=[{"role": "user", "content": message_text}]
@@ -127,7 +128,7 @@ async def handle_incoming_message(request: dict):
     
     try:
         response = anthropic_client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=ANTHROPIC_MODEL,
             max_tokens=300,
             system=RAJ_BASE_PERSONALITY,
             messages=[{"role": "user", "content": message_text}]
