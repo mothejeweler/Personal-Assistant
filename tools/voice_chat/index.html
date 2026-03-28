@@ -801,7 +801,7 @@ async function sendMessage(text) {
 
   conversationHistory.push({ role: 'user', content: messageContent });
 
-  const anthropicModel = localStorage.getItem('anthropic_model') || 'claude-3-5-haiku-latest';
+  const anthropicModel = 'claude-3-7-sonnet-latest';
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {

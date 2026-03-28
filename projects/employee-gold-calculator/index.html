@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Saif Jewelers Gold Calculator</title>
+  <style>
+    :root {
+      --bg-1: #f8f5ef;
+      --bg-2: #e9dcc4;
+      --card: #fffdf7;
+      --text: #1f1b14;
+      --muted: #6c6254;
+      --brand: #8a6a2d;
+      --brand-strong: #6d4f1f;
+      --border: #d8c9ad;
+      --ok-bg: #efe7d4;
+      --ok-border: #c0ab80;
+      --error: #b42318;
+      --shadow: 0 10px 30px rgba(48, 35, 10, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Trebuchet MS", "Segoe UI", sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, var(--bg-2), var(--bg-1) 45%);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+
+    .card {
+      width: min(620px, 100%);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 24px 24px 12px;
+      background: linear-gradient(135deg, #f9f2e3, #ebddc0);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 1.45rem;
+      letter-spacing: 0.2px;
+    }
+
+    .header p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .content {
+      padding: 20px 24px 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 0.92rem;
+      color: #433a2c;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      padding: 11px 12px;
+      font-size: 1rem;
+      font-family: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+
+    input:focus,
+    select:focus,
+    button:focus {
+      outline: 2px solid rgba(138, 106, 45, 0.35);
+      outline-offset: 1px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      flex: 1;
+      min-width: 180px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+      color: #fff;
+      border: 0;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-secondary {
+      width: auto;
+      background: #fff;
+      color: #3f3528;
+      cursor: pointer;
+    }
+
+    .result {
+      border: 1px solid var(--ok-border);
+      background: var(--ok-bg);
+      border-radius: 12px;
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .result-title {
+      margin: 0;
+      color: #4f3d18;
+      font-size: 0.92rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .result-value {
+      margin: 0;
+      font-size: 1.55rem;
+      font-weight: 800;
+      color: #2f2413;
+      word-break: break-word;
+    }
+
+    .error {
+      min-height: 1.2rem;
+      color: var(--error);
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .footer-note {
+      color: var(--muted);
+      font-size: 0.86rem;
+      border-top: 1px dashed var(--border);
+      padding-top: 10px;
+    }
+
+    @media (max-width: 640px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .header,
+      .content {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .result-value {
+        font-size: 1.32rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <section class="header">
+      <h1>Saif Jewelers Employee Calculator</h1>
+      <p>Enter grams and karat to get your internal preset result.</p>
+    </section>
+
+    <section class="content">
+      <div class="grid">
+        <div class="field">
+          <label for="grams">Weight (grams)</label>
+          <input id="grams" name="grams" type="number" min="0" step="0.01" placeholder="e.g. 12.50" />
+        </div>
+
+        <div class="field">
+          <label for="karat">Gold Karat</label>
+          <select id="karat" name="karat">
+            <option value="10">10K</option>
+            <option value="14" selected>14K</option>
+            <option value="18">18K</option>
+            <option value="21">21K</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-primary" id="calculateBtn" type="button">Calculate</button>
+        <button class="btn-secondary" id="clearBtn" type="button">Clear</button>
+      </div>
+
+      <p class="error" id="errorText" aria-live="polite"></p>
+
+      <section class="result" aria-live="polite">
+        <p class="result-title">Predetermined Result</p>
+        <p class="result-value" id="resultText">-</p>
+      </section>
+
+      <p class="footer-note">
+        To lock in your private pricing method, edit the <strong>calculateByYourFormula</strong> function in this file.
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const gramsInput = document.getElementById("grams");
+    const karatInput = document.getElementById("karat");
+    const calculateBtn = document.getElementById("calculateBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const errorText = document.getElementById("errorText");
+    const resultText = document.getElementById("resultText");
+
+    const KARAT_PURITY = {
+      10: 10 / 24,
+      14: 14 / 24,
+      18: 18 / 24,
+      21: 21 / 24,
+    };
+
+    const FORMULA_CONFIG = {
+      // Replace these values with your real internal numbers.
+      baseRate24KPerGram: 73,
+      laborPerGram: 9,
+      fixedFee: 25,
+      markupMultiplier: 1.12,
+      currencySymbol: "$",
+      decimals: 2,
+    };
+
+    function calculateByYourFormula(grams, karat) {
+      const purity = KARAT_PURITY[karat];
+      const pureGoldEquivalent = grams * purity;
+      const baseMetalValue = pureGoldEquivalent * FORMULA_CONFIG.baseRate24KPerGram;
+      const laborValue = grams * FORMULA_CONFIG.laborPerGram;
+      const subtotal = baseMetalValue + laborValue + FORMULA_CONFIG.fixedFee;
+      const finalValue = subtotal * FORMULA_CONFIG.markupMultiplier;
+
+      return finalValue;
+    }
+
+    function formatMoney(value) {
+      return (
+        FORMULA_CONFIG.currencySymbol +
+        Number(value).toLocaleString(undefined, {
+          minimumFractionDigits: FORMULA_CONFIG.decimals,
+          maximumFractionDigits: FORMULA_CONFIG.decimals,
+        })
+      );
+    }
+
+    function runCalculation() {
+      errorText.textContent = "";
+      resultText.textContent = "-";
+
+      const grams = Number(gramsInput.value);
+      const karat = Number(karatInput.value);
+
+      if (!Number.isFinite(grams) || grams <= 0) {
+        errorText.textContent = "Enter a valid gram weight greater than 0.";
+        return;
+      }
+
+      const result = calculateByYourFormula(grams, karat);
+
+      if (!Number.isFinite(result)) {
+        errorText.textContent = "Could not calculate result. Check your formula settings.";
+        return;
+      }
+
+      resultText.textContent = formatMoney(result);
+    }
+
+    function clearForm() {
+      gramsInput.value = "";
+      karatInput.value = "14";
+      errorText.textContent = "";
+      resultText.textContent = "-";
+      gramsInput.focus();
+    }
+
+    calculateBtn.addEventListener("click", runCalculation);
+    clearBtn.addEventListener("click", clearForm);
+
+    gramsInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        runCalculation();
+      }
+    });
+  </script>
+</body>
+</html>

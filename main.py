@@ -11,6 +11,8 @@ import json
 import logging
 import asyncio
 import tempfile
+import random
+import re
 from typing import Set
 from fastapi import FastAPI, Request, HTTPException, Response
 from anthropic import Anthropic
@@ -70,6 +72,8 @@ OWNER_FACEBOOK_IDS: Set[str] = {
     x.strip() for x in OWNER_FACEBOOK_IDS_RAW.split(",") if x.strip()
 }
 ANTHROPIC_MODEL = get_anthropic_model()
+RESPONSE_DELAY_MIN_SECONDS = int(os.getenv("DM_RESPONSE_DELAY_MIN_SECONDS", "60"))
+RESPONSE_DELAY_MAX_SECONDS = int(os.getenv("DM_RESPONSE_DELAY_MAX_SECONDS", "180"))
 SYNC_LOCK_PATH = os.getenv(
     "RAJ_SYNC_LOCK_PATH",
     os.path.join(tempfile.gettempdir(), "raj_personality_sync.lock"),
@@ -93,6 +97,90 @@ def is_owner_sender(sender_id: str) -> bool:
     if not sender_id:
         return False
     return sender_id in OWNER_FACEBOOK_IDS
+
+
+def sanitize_dm_response(text: str) -> str:
+    """Keep responses short/simple and remove self-identifying intros."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return "What's up? What can I help you with?"
+
+    intro_pattern = re.compile(
+        r"^(?:hey\s*,?\s*)?(?:yo\s*,?\s*)?"
+        r"(?:this is|i am|i'm|im|it'?s)?\s*"
+        r"(?:raj|mo(?:e)?)(?:\s+the\s+jeweler)?\s*[,\-:]?\s*",
+        re.IGNORECASE,
+    )
+    cleaned = re.sub(intro_pattern, "", cleaned).strip()
+
+    # Keep conversation moving with concise 1-2 sentence replies.
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", cleaned) if p.strip()]
+    if parts:
+        cleaned = parts[0]
+
+    if len(cleaned) > 160:
+        cleaned = cleaned[:160].rsplit(" ", 1)[0].rstrip(" ,;:-") + "..."
+
+    return cleaned or "What's up? What can I help you with?"
+
+
+def choose_casual_opener(user_message: str) -> str:
+    """Pick a simple opener based on the user's tone."""
+    msg = (user_message or "").lower()
+    if any(x in msg for x in ["bro", "yo", "sup", "what's up", "wsp", "man"]):
+        return "Yo"
+    if any(x in msg for x in ["hey", "hello", "hi"]):
+        return "Hey"
+    return "What's up"
+
+
+def add_casual_opener(user_message: str, reply_text: str) -> str:
+    """Prefix a short greeting and keep the full reply compact."""
+    body = (reply_text or "").strip()
+    if not body:
+        return "What's up?"
+
+    # Avoid duplicate openers if the model already starts similarly.
+    if re.match(r"^(yo|hey|what'?s up)\b", body, re.IGNORECASE):
+        return body
+
+    opener = choose_casual_opener(user_message)
+    combined = f"{opener} - {body}"
+
+    if len(combined) > 180:
+        combined = combined[:180].rsplit(" ", 1)[0].rstrip(" ,;:-") + "..."
+    return combined
+
+
+async def send_facebook_message_with_random_delay(recipient_id: str, message_text: str) -> bool:
+    """Send with a random 1-3 minute delay to feel natural."""
+    min_delay = max(0, RESPONSE_DELAY_MIN_SECONDS)
+    max_delay = max(min_delay, RESPONSE_DELAY_MAX_SECONDS)
+    delay_seconds = random.randint(min_delay, max_delay)
+    logger.info("Delaying response to %s by %ss", recipient_id, delay_seconds)
+    await asyncio.sleep(delay_seconds)
+    return await send_facebook_message(recipient_id, message_text)
+
+
+async def process_incoming_message(sender_id: str, message_text: str) -> None:
+    """Process a single incoming DM outside webhook response timing."""
+    try:
+        # Owner-only real-time runtime editing with explicit confirmation.
+        if runtime_editor and is_owner_sender(sender_id):
+            if runtime_editor.get_setting("realtime_edit_permissions", True):
+                handled, owner_reply = runtime_editor.handle_owner_message(sender_id, message_text)
+                if handled:
+                    await send_facebook_message(sender_id, sanitize_dm_response(owner_reply))
+                    logger.info("Processed owner runtime edit flow for %s", sender_id)
+                    return
+
+        response_text = await generate_response(message_text)
+        response_text = sanitize_dm_response(response_text)
+        response_text = add_casual_opener(message_text, response_text)
+        await send_facebook_message_with_random_delay(sender_id, response_text)
+        logger.info("Response sent to %s", sender_id)
+    except Exception as exc:
+        logger.error("Error in async message processing for %s: %s", sender_id, exc, exc_info=True)
 
 
 def build_runtime_system_prompt() -> str:
@@ -274,23 +362,7 @@ async def handle_facebook_webhook(request: Request):
                     
                     if message_text:
                         logger.info(f"Message from {sender_id}: {message_text}")
-
-                        # Owner-only real-time runtime editing with explicit confirmation.
-                        if runtime_editor and is_owner_sender(sender_id):
-                            if runtime_editor.get_setting("realtime_edit_permissions", True):
-                                handled, owner_reply = runtime_editor.handle_owner_message(sender_id, message_text)
-                                if handled:
-                                    await send_facebook_message(sender_id, owner_reply)
-                                    logger.info("Processed owner runtime edit flow for %s", sender_id)
-                                    continue
-                        
-                        # Generate response using Claude
-                        response_text = await generate_response(message_text)
-                        
-                        # Send response back to Facebook
-                        await send_facebook_message(sender_id, response_text)
-                        
-                        logger.info(f"Response sent to {sender_id}")
+                        asyncio.create_task(process_incoming_message(sender_id, message_text))
         
         return {"status": "ok"}
     
@@ -315,11 +387,18 @@ async def generate_response(user_message: str) -> str:
     """
     try:
         runtime_system_prompt = build_runtime_system_prompt()
+        style_guardrails = (
+            "Reply in Mo's personal voice and style. "
+            "Start with a simple casual opener like yo, hey, or what's up when natural. "
+            "Keep replies extremely short and simple: one short sentence whenever possible, two max. "
+            "Keep conversation flowing naturally. "
+            "Do not mention your name or identity and do not say you are Raj or Mo."
+        )
         response = create_message_with_model_fallback(
             client,
             model=ANTHROPIC_MODEL,
             max_tokens=1024,
-            system=runtime_system_prompt,
+            system=f"{runtime_system_prompt}\n\n---\n{style_guardrails}",
             messages=[
                 {
                     "role": "user",
