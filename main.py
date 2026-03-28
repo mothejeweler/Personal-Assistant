@@ -113,6 +113,20 @@ def sanitize_dm_response(text: str) -> str:
     )
     cleaned = re.sub(intro_pattern, "", cleaned).strip()
 
+    # Remove identity mentions if they appear later in the response too.
+    cleaned = re.sub(
+        r"\b(?:this is|i am|i'm|im|it'?s)\s+(?:raj|mo(?:e)?)(?:\s+the\s+jeweler)?\b[\s,.:;!-]*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = re.sub(
+        r"\b(?:raj|mo(?:e)?)\s+here\b[\s,.:;!-]*",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    ).strip()
+
     # Keep conversation moving with concise 1-2 sentence replies.
     parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", cleaned) if p.strip()]
     if parts:
@@ -170,13 +184,16 @@ async def process_incoming_message(sender_id: str, message_text: str) -> None:
             if runtime_editor.get_setting("realtime_edit_permissions", True):
                 handled, owner_reply = runtime_editor.handle_owner_message(sender_id, message_text)
                 if handled:
-                    await send_facebook_message(sender_id, sanitize_dm_response(owner_reply))
+                    final_owner_reply = sanitize_dm_response(owner_reply)
+                    logger.info("Final outgoing DM to %s: %s", sender_id, final_owner_reply)
+                    await send_facebook_message(sender_id, final_owner_reply)
                     logger.info("Processed owner runtime edit flow for %s", sender_id)
                     return
 
         response_text = await generate_response(message_text)
         response_text = sanitize_dm_response(response_text)
         response_text = add_casual_opener(message_text, response_text)
+        logger.info("Final outgoing DM to %s: %s", sender_id, response_text)
         await send_facebook_message_with_random_delay(sender_id, response_text)
         logger.info("Response sent to %s", sender_id)
     except Exception as exc:
