@@ -242,13 +242,35 @@ def match_inventory_links(message_text: str, max_links: int = 2) -> list[str]:
     if not links:
         return [WEBSITE_INVENTORY_URL] if WEBSITE_INVENTORY_URL else []
 
-    # Filter to likely product/collection pages.
-    inventory_links = [
-        url for url in links
-        if any(x in url.lower() for x in ["product", "products", "shop", "collection", "inventory", "grill", "ring", "chain", "bracelet", "pendant"])
+    non_product_markers = [
+        "about", "contact", "faq", "blog", "privacy", "policy", "terms", "shipping",
+        "returns", "refund", "login", "account", "cart", "checkout", "search", "track-order",
     ]
+    product_markers = [
+        "product", "products", "shop", "collection", "collections", "inventory",
+        "grill", "ring", "chain", "bracelet", "pendant", "necklace", "earring", "watch",
+    ]
+
+    # Keep only product/collection pages and explicitly remove non-product pages.
+    inventory_links = []
+    for url in links:
+        lower = url.lower()
+        if any(x in lower for x in non_product_markers):
+            continue
+        if any(x in lower for x in product_markers):
+            inventory_links.append(url)
+
     if not inventory_links:
         inventory_links = links
+
+    # If this is a chain request, prioritize chain-related URLs only.
+    if is_chain_intent(msg):
+        chain_links = [
+            url for url in inventory_links
+            if any(x in url.lower() for x in ["chain", "chains", "cadena", "necklace", "cuban", "rope", "figaro", "franco", "tennis"])
+        ]
+        if chain_links:
+            inventory_links = chain_links
 
     terms = [t for t in re.split(r"[^a-z0-9]+", msg) if len(t) >= 3]
     if not terms:
