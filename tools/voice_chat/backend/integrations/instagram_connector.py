@@ -5,7 +5,6 @@ Handles receiving and sending Instagram DMs
 
 import os
 import requests
-from typing import dict, list
 from datetime import datetime
 
 class InstagramClient:

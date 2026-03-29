@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Decimal, Boolean, ForeignKey, Index
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Numeric, Boolean, ForeignKey, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from datetime import datetime
@@ -24,10 +24,10 @@ class Customer(Base):
     price_range = Column(String(50))
     preferred_metal = Column(String(50))
     
-    total_purchases = Column(Decimal(10, 2), default=0)
+    total_purchases = Column(Numeric(10, 2), default=0)
     purchase_count = Column(Integer, default=0)
     last_purchase_date = Column(DateTime, nullable=True)
-    average_order_value = Column(Decimal(10, 2), nullable=True)
+    average_order_value = Column(Numeric(10, 2), nullable=True)
     
     lead_score = Column(Integer, default=0)
     is_high_value = Column(Boolean, default=False)
@@ -138,7 +138,7 @@ class Inventory(Base):
     shopify_product_id = Column(String(100))
     shopify_variant_id = Column(String(100))
     
-    price_usd = Column(Decimal(10, 2))
+    price_usd = Column(Numeric(10, 2))
     last_updated = Column(DateTime, default=datetime.utcnow)
     
     alerts = relationship("InventoryAlert", back_populates="inventory")
@@ -167,7 +167,7 @@ class Trend(Base):
     
     trend_category = Column(String(100))
     mention_count = Column(Integer)
-    engagement_rate = Column(Decimal(5, 2))
+    engagement_rate = Column(Numeric(5, 2))
     
     relevance_to_mo = Column(Boolean, default=False)
     recommended_action = Column(Text)
@@ -230,7 +230,7 @@ class DailyBenchmark(Base):
     recommended_actions = Column(Integer, default=0)
     
     content_published = Column(Integer, default=0)
-    engagement_rate = Column(Decimal(5, 2), nullable=True)
+    engagement_rate = Column(Numeric(5, 2), nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
 

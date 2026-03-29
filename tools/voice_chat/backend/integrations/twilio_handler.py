@@ -5,7 +5,6 @@ Handles WhatsApp and SMS messaging
 
 import os
 from twilio.rest import Client
-from typing import dict
 
 class TwilioMessenger:
     def __init__(self):
@@ -13,11 +12,21 @@ class TwilioMessenger:
         self.auth_token = os.getenv("TWILIO_AUTH_TOKEN")
         self.whatsapp_from = os.getenv("TWILIO_WHATSAPP_FROM")
         self.sms_from = os.getenv("TWILIO_SMS_FROM")
-        
-        self.client = Client(self.account_sid, self.auth_token)
+
+        # Allow local/dev runs without Twilio credentials so message ingestion still works.
+        if self.account_sid and self.auth_token:
+            self.client = Client(self.account_sid, self.auth_token)
+        else:
+            self.client = None
     
     def send_whatsapp(self, to_number: str, message: str) -> dict:
         """Send WhatsApp message"""
+        if self.client is None or not self.whatsapp_from:
+            return {
+                "status": "error",
+                "error": "Twilio WhatsApp is not configured",
+                "channel": "whatsapp"
+            }
         try:
             msg = self.client.messages.create(
                 body=message,
@@ -39,6 +48,12 @@ class TwilioMessenger:
     
     def send_sms(self, to_number: str, message: str) -> dict:
         """Send SMS message"""
+        if self.client is None or not self.sms_from:
+            return {
+                "status": "error",
+                "error": "Twilio SMS is not configured",
+                "channel": "sms"
+            }
         try:
             msg = self.client.messages.create(
                 body=message,

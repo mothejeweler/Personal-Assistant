@@ -5,15 +5,17 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 sqlalchemy==2.0.24
 psycopg2-binary==2.9.9
-anthropic==0.21.5
+anthropic==0.86.0
 requests==2.31.0
 httpx==0.25.2
 python-multipart==0.0.6
 APScheduler==3.10.4
 tweepy==4.14.0
-shopify==14.2.0
+# Shopify connector in this backend uses direct REST requests, no SDK required.
+# If SDK usage is added later, prefer ShopifyAPI package with a tested version.
 twilio==8.10.0
-instagrapi==2.0.0
+# Optional: this pin conflicts with pydantic>=2 used by FastAPI stack.
+# Install only in isolated env if needed for separate workflows.
 aiohttp==3.9.1
 beautifulsoup4==4.12.2
 lxml==4.9.3

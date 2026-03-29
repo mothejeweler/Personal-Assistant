@@ -5,7 +5,6 @@ Syncs inventory, tracks sales, retrieves customer purchase history
 
 import os
 import requests
-from typing import dict, list
 from datetime import datetime
 
 class ShopifyClient:

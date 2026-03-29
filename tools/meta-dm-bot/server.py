@@ -5,6 +5,7 @@ generates replies using Claude, and sends them automatically.
 """
 
 import os
+import logging
 import requests
 from flask import Flask, request, jsonify
 from anthropic import Anthropic
@@ -13,12 +14,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("meta_dm_bot")
 
 VERIFY_TOKEN = os.getenv("META_VERIFY_TOKEN")
 FB_PAGE_ACCESS_TOKEN = os.getenv("META_FB_PAGE_ACCESS_TOKEN")
 IG_PAGE_ACCESS_TOKEN = os.getenv("META_IG_PAGE_ACCESS_TOKEN")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-ANTHROPIC_MODEL = os.getenv("ANTHROPIC_DM_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-latest"))
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_DM_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-20241022"))
+ANTHROPIC_FALLBACK_MODELS = [
+    m.strip() for m in os.getenv(
+        "ANTHROPIC_FALLBACK_MODELS",
+        "claude-3-5-haiku-20241022,claude-3-5-sonnet-20241022"
+    ).split(",") if m.strip()
+]
 
 anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
@@ -77,42 +86,71 @@ PRODUCT LINKS — use the most specific link possible:
 
 
 def generate_reply(message_text: str) -> str:
-    response = anthropic_client.messages.create(
-        model=ANTHROPIC_MODEL,
-        max_tokens=300,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": message_text}]
-    )
-    return response.content[0].text
+    models_to_try = [ANTHROPIC_MODEL] + [m for m in ANTHROPIC_FALLBACK_MODELS if m != ANTHROPIC_MODEL]
+    last_error = None
+
+    for model in models_to_try:
+        try:
+            response = anthropic_client.messages.create(
+                model=model,
+                max_tokens=300,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": message_text}]
+            )
+            logger.info("Claude reply generated with model=%s", model)
+            return response.content[0].text
+        except Exception as exc:
+            last_error = exc
+            logger.exception("Claude generation failed with model=%s", model)
+
+    logger.error("All Claude models failed. Last error: %s", last_error)
+    return "Thanks for reaching out. We got your message and our team will reply shortly with the best options for you."
 
 
 def send_message(recipient_id: str, text: str, access_token: str) -> None:
     url = "https://graph.facebook.com/v21.0/me/messages"
     payload = {
         "recipient": {"id": recipient_id},
-        "message": {"text": text},
-        "access_token": access_token
+        "messaging_type": "RESPONSE",
+        "message": {"text": text}
     }
-    resp = requests.post(url, json=payload, timeout=10)
+    resp = requests.post(url, params={"access_token": access_token}, json=payload, timeout=10)
     if not resp.ok:
-        print(f"[ERROR] Failed to send message: {resp.status_code} {resp.text}")
+        logger.error("Failed to send message: %s %s", resp.status_code, resp.text)
+    else:
+        logger.info("Message sent to recipient=%s", recipient_id)
+
+
+def process_single_event(event: dict, access_token: str) -> None:
+    # Skip echo (our own sent messages)
+    if event.get("message", {}).get("is_echo"):
+        return
+
+    sender_id = event.get("sender", {}).get("id")
+    message = event.get("message", {})
+    text = (message.get("text") or "").strip()
+
+    # Handle basic postback payloads as text to keep conversations flowing.
+    if not text:
+        text = (event.get("postback", {}).get("payload") or "").strip()
+
+    if sender_id and text:
+        logger.info("Incoming DM from %s: %s", sender_id, text)
+        reply = generate_reply(text)
+        send_message(sender_id, reply, access_token)
+        logger.info("Reply to %s: %s", sender_id, reply)
 
 
 def process_messaging_events(entry: dict, access_token: str) -> None:
+    # Standard Messenger/Instagram messaging events.
     for event in entry.get("messaging", []):
-        # Skip echo (our own sent messages)
-        if event.get("message", {}).get("is_echo"):
-            continue
+        process_single_event(event, access_token)
 
-        sender_id = event.get("sender", {}).get("id")
-        message = event.get("message", {})
-        text = message.get("text", "").strip()
-
-        if sender_id and text:
-            print(f"[DM] From {sender_id}: {text}")
-            reply = generate_reply(text)
-            send_message(sender_id, reply, access_token)
-            print(f"[REPLY] To {sender_id}: {reply}")
+    # Some webhook payloads place message events inside `changes[].value.messaging`.
+    for change in entry.get("changes", []):
+        value = change.get("value", {})
+        for event in value.get("messaging", []):
+            process_single_event(event, access_token)
 
 
 @app.route("/webhook", methods=["GET"])
@@ -131,8 +169,10 @@ def verify_webhook():
 @app.route("/webhook", methods=["POST"])
 def handle_webhook():
     """Receive and process incoming DM events."""
-    data = request.json
+    data = request.json or {}
     obj_type = data.get("object")
+
+    logger.info("Webhook received object=%s keys=%s", obj_type, list(data.keys()))
 
     if obj_type == "page":
         token = FB_PAGE_ACCESS_TOKEN
@@ -141,10 +181,29 @@ def handle_webhook():
     else:
         return jsonify({"status": "ignored"}), 200
 
+    if not token:
+        logger.error("Missing access token for object=%s", obj_type)
+        return jsonify({"status": "misconfigured", "object": obj_type}), 200
+
     for entry in data.get("entry", []):
-        process_messaging_events(entry, token)
+        try:
+            process_messaging_events(entry, token)
+        except Exception:
+            logger.exception("Failed processing entry")
 
     return jsonify({"status": "ok"}), 200
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "meta_verify_token": bool(VERIFY_TOKEN),
+        "meta_fb_page_access_token": bool(FB_PAGE_ACCESS_TOKEN),
+        "meta_ig_page_access_token": bool(IG_PAGE_ACCESS_TOKEN),
+        "anthropic_api_key": bool(ANTHROPIC_API_KEY),
+        "anthropic_model": ANTHROPIC_MODEL,
+    }), 200
 
 
 @app.route("/subscribe", methods=["GET"])

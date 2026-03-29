@@ -10,3 +10,5 @@ data/personality_delta.md
 data/runtime_editor.json
 data/runtime_editor_test.json
 data/raj_voice_sample.mp3
+tools/voice_chat/backend/.env.runtime
+tools/voice_chat/backend/raj_dashboard.db

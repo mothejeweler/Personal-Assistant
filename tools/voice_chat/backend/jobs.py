@@ -19,6 +19,7 @@ from monitors.trend_monitor import TrendMonitor
 from monitors.inventory_monitor import InventoryMonitor
 from monitors.dm_monitor import DMMonitor
 from integrations.twilio_handler import TwilioMessenger
+from integrations.gmail_connector import sync_gmail_to_backend
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -182,6 +183,19 @@ def send_morning_standup():
     except Exception as e:
         logger.error(f"Morning standup error: {e}")
 
+def run_gmail_sync():
+    """Sync unread Gmail messages every 10 minutes"""
+    try:
+        import os
+        backend_url = os.getenv("BACKEND_URL", "http://127.0.0.1:8011")
+        result = sync_gmail_to_backend(backend_url)
+        
+        if result.get("count", 0) > 0:
+            logger.info(f"✅ Gmail sync: Ingested {result['count']} emails")
+        
+    except Exception as e:
+        logger.error(f"Gmail sync error: {e}")
+
 
 def start_scheduler():
     """Start the background job scheduler"""
@@ -234,8 +248,16 @@ def start_scheduler():
         name='Daily Morning Standup at 8 AM'
     )
     
+    # Gmail sync - every 10 minutes
+    scheduler.add_job(
+        run_gmail_sync,
+        trigger=IntervalTrigger(minutes=10),
+        id='gmail_sync',
+        name='Gmail Inbox Sync (10min)'
+    )
+    
     scheduler.start()
-    logger.info("🚀 Background scheduler started with 6 monitoring jobs")
+    logger.info("🚀 Background scheduler started with 7 monitoring jobs")
     
     return scheduler
 

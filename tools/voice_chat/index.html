@@ -138,6 +138,51 @@
       color: #f0f0f0;
     }
 
+    .inspiration-panel {
+      margin-top: 10px;
+      padding: 10px;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      background: #121212;
+    }
+    .inspiration-title {
+      font-size: 11px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: #8a8a8a;
+      margin-bottom: 8px;
+    }
+    .inspiration-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .inspiration-link {
+      display: inline-block;
+      padding: 5px 9px;
+      border: 1px solid #353535;
+      border-radius: 999px;
+      color: #cfcfcf;
+      text-decoration: none;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+    .inspiration-link:hover {
+      border-color: #5a5a5a;
+      color: #fff;
+    }
+    .inspiration-btn {
+      margin-top: 8px;
+      padding: 7px 10px;
+      border: 1px solid #3a3a3a;
+      border-radius: 10px;
+      background: #1d1d1d;
+      color: #d9d9d9;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .inspiration-btn:hover { border-color: #5a5a5a; color: #fff; }
+
     .speak-btn {
       display: inline-block;
       margin-top: 6px;
@@ -152,12 +197,35 @@
     }
     .speak-btn:active { background: #2a2a2a; }
 
-    .msg.image { align-self: flex-start; max-width: 88%; }
-    .msg.image img {
-      border-radius: 14px;
-      max-width: 100%;
+    .image-strip {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .image-card {
+      flex: 0 0 150px;
+      width: 150px;
+      border-radius: 12px;
+      border: 1px solid #222;
+      background: #101010;
+      padding: 6px;
+    }
+    .image-card img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      border-radius: 8px;
       display: block;
       border: 1px solid #222;
+    }
+    .image-status {
+      margin-top: 6px;
+      font-size: 11px;
+      color: #8a8a8a;
+      line-height: 1.3;
     }
 
     .typing-cursor::after {
@@ -309,7 +377,7 @@
     <input
       type="password"
       id="el-key-input"
-      placeholder="ElevenLabs key: sk_..."
+      placeholder="Optional ElevenLabs key: sk_..."
       autocomplete="off"
       autocorrect="off"
       autocapitalize="none"
@@ -318,6 +386,14 @@
       type="password"
       id="tavily-key-input"
       placeholder="Tavily key: tvly-..."
+      autocomplete="off"
+      autocorrect="off"
+      autocapitalize="none"
+    />
+    <input
+      type="text"
+      id="model-input"
+      placeholder="Model: e.g. claude-opus-4-5"
       autocomplete="off"
       autocorrect="off"
       autocapitalize="none"
@@ -388,9 +464,38 @@ You never list facts — you tell stories. Every answer is a mini narrative with
 
 You have access to real-time web search. When you receive live search results, use them — give real current answers, not vague memories. Always connect trends and news back to Mo's world as a jeweler and content creator.
 
+Novelty protocol (mandatory): never give generic recycled advice, never echo Mo's own framing, and never rely on stale assumptions. Use live search evidence first, then produce fresh synthesis. Every strategic answer must include: what is spiking now, why it matters for Mo specifically, and one concrete move he can execute in the next 24 hours.
+
+When data is weak, say it plainly in one sentence and pivot to a smart test plan instead of bluffing. Prioritize high-signal opportunities with momentum: breakout creators, celebrity moments, format shifts, sounds, and buying-behavior changes that can be translated into jewelry content and offers.
+
+When Mo asks for ideas, generate original concepts that combine at least two live signals (trend + audience behavior, trend + product angle, or trend + distribution tactic). Avoid safe obvious concepts unless requested.
+
 As his day-to-day helper, you proactively think about his business. If he asks about a gold price spike, connect it to his inventory decisions. If he asks about a celebrity wearing jewelry, tell him how to capitalize on it. If he asks about a TikTok trend, tell him what piece he should be making and posting. Always be one step ahead — that is your job.
 
-You are SPEAKING out loud in real-time. Be extremely concise — get to the new information fast and never repeat back what Mo already knows about himself or his business. Write in flowing connected speech using "and", "so", "which means", "but" to avoid pauses. No bullet points, no markdown, no lists. Never say you are text-only or can't speak — you have a voice.`;
+You are SPEAKING out loud in real-time. Default to one or two sentences maximum unless Mo explicitly asks for a deep dive. Keep it sharp, specific, and immediately useful. No bullet points, no markdown, no lists. Never say you are text-only or can't speak — you have a voice.`;
+}
+
+function getCommandOverlay(text) {
+  const t = text.toLowerCase().trim();
+
+  // Operator-style commands for consistent, high-signal outputs.
+  if (t.includes('trend lab')) {
+    return `Command mode: TREND_LAB. Produce exactly 3 fresh content/product concepts sourced from live signals in the last 7 days. For each concept: name the signal, explain why Mo can win, and give a same-day execution move.`;
+  }
+  if (t.includes('spike radar')) {
+    return `Command mode: SPIKE_RADAR. Find active spikes that are accelerating right now. Return only the strongest opportunities and rank by speed-to-revenue for Mo.`;
+  }
+  if (t.includes('angle machine')) {
+    return `Command mode: ANGLE_MACHINE. Take one trend and generate 5 non-obvious hooks in Mo's voice with different emotional angles: flex, gift, story, controversy, aspiration.`;
+  }
+  if (t.includes('offer forge')) {
+    return `Command mode: OFFER_FORGE. Build one trend-native jewelry offer that can convert this week. Include price logic, urgency mechanic, and DM-to-checkout flow.`;
+  }
+  if (t.includes('wildcard me')) {
+    return `Command mode: WILDCARD. Ignore obvious directions and generate one contrarian but plausible concept with why it could break out.`;
+  }
+
+  return '';
 }
 
 
@@ -488,6 +593,8 @@ function init() {
   apiKey = localStorage.getItem('mo_assistant_key') || '';
   elevenLabsKey = localStorage.getItem('mo_el_key') || '';
   tavilyKey = localStorage.getItem('mo_tavily_key') || '';
+  const savedModel = localStorage.getItem('mo_model');
+  if (savedModel) document.getElementById('model-input').value = savedModel;
   selectedVoiceName = localStorage.getItem('mo_voice_name') || '';
   if (apiKey) {
     document.getElementById('setup').classList.add('hidden');
@@ -520,7 +627,10 @@ function saveKey() {
     tavilyKey = tvKey;
     localStorage.setItem('mo_tavily_key', tvKey);
   }
-  const voiceSel = document.getElementById('voice-select').value;
+  const modelInput = document.getElementById('model-input').value.trim();
+  if (modelInput) localStorage.setItem('mo_model', modelInput);
+  const voiceEl = document.getElementById('voice-select');
+  const voiceSel = voiceEl ? voiceEl.value : '';
   if (voiceSel) {
     selectedVoiceName = voiceSel;
     localStorage.setItem('mo_voice_name', voiceSel);
@@ -534,6 +644,7 @@ function resetKey() {
   localStorage.removeItem('mo_assistant_key');
   localStorage.removeItem('mo_el_key');
   localStorage.removeItem('mo_tavily_key');
+  localStorage.removeItem('mo_model');
   location.reload();
 }
 
@@ -693,18 +804,103 @@ function isImageRequest(text) {
   return IMAGE_TRIGGERS.some(t => lower.includes(t));
 }
 
-async function generateImage(prompt) {
+function ensureImageStrip(bubble) {
+  if (!bubble) return null;
+  let strip = bubble.querySelector('.image-strip');
+  if (!strip) {
+    strip = document.createElement('div');
+    strip.className = 'image-strip';
+    bubble.appendChild(strip);
+  }
+  return strip;
+}
+
+async function generateImage(prompt, imageStrip = null) {
   const jewelryPrompt = `luxury jewelry product photo, ${prompt}, professional studio lighting, high resolution, elegant`;
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(jewelryPrompt)}?width=1024&height=1024&nologo=true&model=flux`;
-  const row = document.createElement('div');
-  row.className = 'msg image';
+  const encodedPrompt = encodeURIComponent(jewelryPrompt);
+  const seed = Date.now();
+  const fallbackUrls = [
+    `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${seed}`,
+    `https://image.pollinations.ai/prompt/${encodedPrompt}?width=768&height=768&nologo=true&seed=${seed + 1}`,
+    `https://loremflickr.com/1024/1024/jewelry?lock=${Math.floor(Math.random() * 100000)}`
+  ];
+
+  const card = document.createElement('div');
+  card.className = 'image-card';
   const img = document.createElement('img');
-  img.src = url;
   img.alt = prompt;
-  row.appendChild(img);
-  document.getElementById('messages').appendChild(row);
+  img.loading = 'lazy';
+  img.style.display = 'none';
+  const status = document.createElement('div');
+  status.className = 'image-status';
+  status.textContent = 'Generating visual...';
+
+  card.appendChild(img);
+  card.appendChild(status);
+
+  if (!imageStrip) {
+    const messages = document.getElementById('messages');
+    const fallbackRow = document.createElement('div');
+    fallbackRow.className = 'msg assistant';
+    const fallbackBubble = document.createElement('div');
+    fallbackBubble.className = 'bubble';
+    fallbackRow.appendChild(fallbackBubble);
+    messages.appendChild(fallbackRow);
+    imageStrip = ensureImageStrip(fallbackBubble);
+  }
+
+  imageStrip.appendChild(card);
   document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+
+  const loaded = await new Promise((resolve) => {
+    let i = 0;
+    const tryNext = () => {
+      if (i >= fallbackUrls.length) {
+        resolve(false);
+        return;
+      }
+      img.src = fallbackUrls[i++];
+    };
+
+    img.onload = () => resolve(true);
+    img.onerror = () => tryNext();
+    tryNext();
+  });
+
+  if (loaded) {
+    img.style.display = 'block';
+    status.textContent = 'Visual ready';
+  } else {
+    status.textContent = 'Image source failed. Tap for Google Images results.';
+    const fallbackLink = document.createElement('a');
+    fallbackLink.className = 'inspiration-link';
+    fallbackLink.href = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(prompt + ' jewelry concept')}`;
+    fallbackLink.target = '_blank';
+    fallbackLink.rel = 'noopener noreferrer';
+    fallbackLink.textContent = 'Open image results';
+    card.appendChild(fallbackLink);
+  }
+
   return `Here's a visual concept for ${prompt} — take a look at what I pulled up for you`;
+}
+
+const VISUAL_HINTS = ['trend', 'trending', 'viral', 'idea', 'concept', 'content', 'reel', 'post', 'campaign', 'instagram', 'tiktok', 'style', 'design', 'inspo', 'inspiration', 'look'];
+
+function shouldAutoVisualize(text) {
+  const t = (text || '').toLowerCase();
+  return VISUAL_HINTS.some(k => t.includes(k));
+}
+
+async function autoGenerateInlineImages(text, imageStrip) {
+  const prompts = [
+    `${text}, premium product shot, social-first composition`,
+    `${text}, bold editorial jewelry concept, high contrast lighting`
+  ];
+  for (const p of prompts) {
+    try {
+      await generateImage(p, imageStrip);
+    } catch (_) {}
+  }
 }
 
 // ── Location ──
@@ -760,11 +956,111 @@ async function searchWeb(query) {
     if (!res.ok) return null;
     const data = await res.json();
     const summary = data.answer || '';
-    const snippets = (data.results || []).map(r => `${r.title}: ${r.content}`).join('\n');
-    return (summary + '\n' + snippets).trim();
+    const results = data.results || [];
+    const snippets = results.map(r => `${r.title}: ${r.content}`).join('\n');
+    return {
+      query: locationQuery,
+      summary,
+      snippets,
+      results,
+      contextText: (summary + '\n' + snippets).trim()
+    };
   } catch(e) {
     return null;
   }
+}
+
+function addInspirationPanel(bubble, searchData, userText, imageStrip) {
+  if (!bubble || !userText) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'inspiration-panel';
+
+  const title = document.createElement('div');
+  title.className = 'inspiration-title';
+  title.textContent = 'Inspiration Links';
+  panel.appendChild(title);
+
+  const linksWrap = document.createElement('div');
+  linksWrap.className = 'inspiration-links';
+
+  const videoResults = ((searchData && searchData.results) || []).filter(r => {
+    const u = (r.url || '').toLowerCase();
+    return u.includes('youtube.com') || u.includes('youtu.be') || u.includes('tiktok.com') || u.includes('instagram.com');
+  }).slice(0, 3);
+
+  const addLink = (label, url) => {
+    if (!url) return;
+    const a = document.createElement('a');
+    a.className = 'inspiration-link';
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = label;
+    linksWrap.appendChild(a);
+  };
+
+  if (videoResults.length) {
+    videoResults.forEach((r, i) => {
+      const shortTitle = (r.title || `Video ${i + 1}`).slice(0, 40);
+      addLink(`Video: ${shortTitle}`, r.url);
+    });
+  } else {
+    addLink('YouTube examples', `https://www.youtube.com/results?search_query=${encodeURIComponent(`${userText} jewelry trend`)}`);
+    addLink('TikTok examples', `https://www.tiktok.com/search?q=${encodeURIComponent(`${userText} jewelry`)}`);
+    addLink('Instagram examples', `https://www.instagram.com/explore/search/keyword/?q=${encodeURIComponent(`${userText} jewelry`)}`);
+  }
+
+  addLink('Google Images', `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${userText} jewelry concept`)}`);
+  addLink('Moodboard Images', `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(`${userText} luxury jewelry campaign`)}`);
+  addLink('Open AI image result', `https://image.pollinations.ai/prompt/${encodeURIComponent(`luxury jewelry product photo, ${userText}, high-end editorial lighting, detailed, trend-forward`)}`);
+
+  panel.appendChild(linksWrap);
+
+  const genBtn = document.createElement('button');
+  genBtn.className = 'inspiration-btn';
+  genBtn.type = 'button';
+  genBtn.textContent = 'Generate Similar Concept Here';
+  genBtn.onclick = async () => {
+    genBtn.disabled = true;
+    genBtn.textContent = 'Generating...';
+    try {
+      await generateImage(`${userText} inspired by current viral jewelry trends`, imageStrip);
+      genBtn.textContent = 'Generated below';
+    } catch (_) {
+      genBtn.textContent = 'Try again';
+      genBtn.disabled = false;
+    }
+  };
+  panel.appendChild(genBtn);
+
+  const genBatchBtn = document.createElement('button');
+  genBatchBtn.className = 'inspiration-btn';
+  genBatchBtn.type = 'button';
+  genBatchBtn.textContent = 'Generate 5 Variations';
+  genBatchBtn.onclick = async () => {
+    genBatchBtn.disabled = true;
+    genBatchBtn.textContent = 'Generating 5...';
+    const variations = [
+      `${userText}, high polish yellow gold, celebrity style`,
+      `${userText}, white gold and diamonds, editorial fashion look`,
+      `${userText}, streetwear jewelry vibe, close-up macro shot`,
+      `${userText}, gift-ready romantic aesthetic, warm luxury lighting`,
+      `${userText}, bold custom statement piece, viral social ad style`
+    ];
+    try {
+      for (const v of variations) {
+        await generateImage(v, imageStrip);
+      }
+      genBatchBtn.textContent = '5 generated below';
+    } catch (_) {
+      genBatchBtn.textContent = 'Try batch again';
+      genBatchBtn.disabled = false;
+    }
+  };
+  panel.appendChild(genBatchBtn);
+
+  bubble.appendChild(panel);
 }
 
 // ── Claude API ──
@@ -778,15 +1074,20 @@ async function sendMessage(text) {
   stopSpeaking();
 
   let messageContent = text;
+  const commandOverlay = getCommandOverlay(text);
+  let searchData = null;
+  let imageStrip = null;
 
   // Image generation
   if (isImageRequest(text)) {
     setStatus('Generating image…', 'thinking');
-    const imageResponse = await generateImage(text);
-    queueSpeech(imageResponse);
+    const imageResponse = `Here is a concept visual for ${text}.`;
     conversationHistory.push({ role: 'user', content: text });
     conversationHistory.push({ role: 'assistant', content: imageResponse });
     bubble.textContent = imageResponse;
+    imageStrip = ensureImageStrip(bubble);
+    await generateImage(text, imageStrip);
+    queueSpeech(imageResponse);
     return;
   }
 
@@ -795,13 +1096,18 @@ async function sendMessage(text) {
     setStatus('Searching…', 'thinking');
     const results = await searchWeb(text);
     if (results) {
-      messageContent = `[Live web search results:\n${results}]\n\nUser asked: ${text}`;
+      searchData = results;
+      messageContent = `[Live web search results:\n${results.contextText}]\n\nUser asked: ${text}${commandOverlay ? `\n\n${commandOverlay}` : ''}`;
     }
+  }
+
+  if (!messageContent.includes('[Live web search results:') && commandOverlay) {
+    messageContent = `${text}\n\n${commandOverlay}`;
   }
 
   conversationHistory.push({ role: 'user', content: messageContent });
 
-  const anthropicModel = 'claude-3-7-sonnet-latest';
+  const anthropicModel = localStorage.getItem('mo_model') || 'claude-opus-4-5';
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -814,7 +1120,7 @@ async function sendMessage(text) {
       },
       body: JSON.stringify({
         model: anthropicModel,
-        max_tokens: 512,
+        max_tokens: 220,
         stream: true,
         system: getSystemPrompt(),
         messages: conversationHistory
@@ -823,7 +1129,7 @@ async function sendMessage(text) {
 
     if (!res.ok) {
       let errMsg = `API error ${res.status}`;
-      try { const b = await res.json(); errMsg = b.error?.message || errMsg; } catch(_) {}
+      try { const b = await res.json(); errMsg = `[${res.status}] ${JSON.stringify(b)}`; } catch(_) {}
       throw new Error(errMsg);
     }
 
@@ -862,6 +1168,11 @@ async function sendMessage(text) {
     if (fullText.trim()) {
       queueSpeech(fullText.trim());
       addSpeakButton(fullText.trim());
+      imageStrip = ensureImageStrip(bubble);
+      addInspirationPanel(bubble, searchData, text, imageStrip);
+      if (shouldAutoVisualize(text)) {
+        autoGenerateInlineImages(text, imageStrip);
+      }
     }
     conversationHistory.push({ role: 'assistant', content: fullText });
 
