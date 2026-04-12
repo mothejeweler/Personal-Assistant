@@ -874,6 +874,46 @@ async def handle_tiktok_webhook(request: Request):
 
 
 # ============================================================================
+# MANYCHAT WEBHOOK HANDLER (TikTok DM relay)
+# ============================================================================
+
+@app.post("/webhooks/manychat")
+async def handle_manychat_webhook(request: Request):
+    """
+    Receive a TikTok DM forwarded by ManyChat, generate Raj's reply,
+    and return it so ManyChat can send it back to the user.
+
+    ManyChat External Request body should be:
+        {"message": "{{last_input_text}}", "subscriber_id": "{{subscriber_id}}", "first_name": "{{first_name}}"}
+
+    ManyChat Response Mapping should map:
+        response.reply  →  Custom Field  raj_reply
+    """
+    try:
+        data = await request.json()
+        message = (data.get("message") or "").strip()
+        subscriber_id = str(data.get("subscriber_id") or "manychat_unknown")
+        first_name = data.get("first_name") or ""
+
+        if not message:
+            raise HTTPException(status_code=400, detail="message field is required")
+
+        logger.info(f"ManyChat DM from {subscriber_id} ({first_name}): {message}")
+
+        raj_response = await generate_response(message, sender_id=subscriber_id)
+        store_conversation_turn(subscriber_id, message, raj_response)
+
+        logger.info(f"ManyChat reply for {subscriber_id}: {raj_response[:80]}")
+        return {"reply": raj_response}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error handling ManyChat webhook: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # MESSAGE GENERATION
 # ============================================================================
 
