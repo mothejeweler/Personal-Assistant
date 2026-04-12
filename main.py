@@ -17,10 +17,12 @@ import time
 import xml.etree.ElementTree as ET
 from typing import Set
 from fastapi import FastAPI, Request, HTTPException, Response
+from fastapi.responses import PlainTextResponse
 from anthropic import Anthropic
 import requests
 from dotenv import load_dotenv
 from anthropic_utils import create_message_with_model_fallback, get_anthropic_model
+from integrations.tiktok_connector import TikTokClient
 
 # Load environment variables from .env
 load_dotenv()
@@ -811,6 +813,63 @@ async def handle_facebook_webhook(request: Request):
     
     except Exception as e:
         logger.error(f"Error handling webhook: {str(e)}", exc_info=True)
+        return {"status": "error", "message": str(e)}
+
+
+# ============================================================================
+# TIKTOK WEBHOOK HANDLERS
+# ============================================================================
+
+_tiktok_client = TikTokClient()
+
+
+@app.get("/webhooks/tiktok")
+async def verify_tiktok_webhook(request: Request):
+    """TikTok webhook verification handshake."""
+    token = request.query_params.get("hub.verify_token") or request.query_params.get("verify_token")
+    challenge = request.query_params.get("hub.challenge") or request.query_params.get("challenge")
+    ok, result = _tiktok_client.verify_challenge(token, challenge)
+    if not ok:
+        raise HTTPException(status_code=403, detail=result)
+    return PlainTextResponse(result)
+
+
+@app.post("/webhooks/tiktok")
+async def handle_tiktok_webhook(request: Request):
+    """Handle incoming TikTok DM events."""
+    try:
+        body = await request.body()
+
+        sig = request.headers.get("x-tiktok-signature") or request.headers.get("x-signature")
+        if not _tiktok_client.verify_webhook_signature(body, sig):
+            raise HTTPException(status_code=403, detail="Invalid signature")
+
+        payload = json.loads(body)
+        parsed = _tiktok_client.parse_webhook_payload(payload)
+
+        sender_id = parsed["from"]
+        message_text = parsed["message"]
+        event_id = parsed.get("event_id", "")
+
+        logger.info(f"TikTok DM from {sender_id}: {message_text}")
+
+        # Generate Raj's response
+        raj_response = await generate_response(message_text, sender_id)
+        store_conversation_turn(sender_id, message_text, raj_response)
+
+        # Send reply via outbound relay
+        result = _tiktok_client.send_direct_message(sender_id, raj_response)
+        logger.info(f"TikTok outbound result for {sender_id}: {result}")
+
+        return {"status": "success", "channel": "tiktok", "event_id": event_id}
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.warning(f"TikTok payload parse error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error handling TikTok webhook: {e}", exc_info=True)
         return {"status": "error", "message": str(e)}
 
 
